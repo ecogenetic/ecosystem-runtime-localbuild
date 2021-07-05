@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.ecosystem.local</groupId>
+    <artifactId>ecosystem-runtime-localbuild</artifactId>
+    <version>0.2.0</version>
+    <packaging>jar</packaging>
+
+    <name>Ecosystem.Ai Client Pulse Responder (Runtime Real-time Scoring)</name>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.2.6.RELEASE</version>
+    </parent>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <start-class>com.ecosystem.runtime.EcosystemApp</start-class>
+        <java.version>11</java.version>
+        <docker.image.prefix>${user.name}</docker.image.prefix>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>internal.repo</id>
+            <name>Temporary Staging Repository</name>
+            <url>file://${project.build.directory}/mvn-repo</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+
+        <dependency>
+            <groupId>com.ecosystem</groupId>
+            <artifactId>ecosystem-runtime</artifactId>
+            <version>0.8.5.0</version>
+            <scope>system</scope>
+            <systemPath>
+                /Users/jayvanzyl/Documents/Projects/ecosystem-ai-next/ecosystem-runtime-localbuild/target/mvn-repo/com/ecosystem/ecosystem-runtime/0.8.5.0/ecosystem-runtime-0.8.5.0.jar
+            </systemPath>
+        </dependency>
+
+        <dependency>
+            <groupId>com.datastax.oss</groupId>
+            <artifactId>java-driver-core</artifactId>
+            <version>4.5.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.json</groupId>
+                    <artifactId>json</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.datastax.oss</groupId>
+            <artifactId>java-driver-query-builder</artifactId>
+            <version>4.5.1</version>
+        </dependency>
+        <dependency>
+            <groupId>ai.h2o</groupId>
+            <artifactId>h2o-genmodel</artifactId>
+            <version>3.32.0.4</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>slf4j-log4j12</artifactId>
+                    <groupId>org.slf4j</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>2.12.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>2.13.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20200518</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>bson</artifactId>
+            <version>4.2.3</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>mongodb-driver-sync</artifactId>
+            <version>4.2.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>mongodb-driver-core</artifactId>
+            <version>4.2.3</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.mongodb</groupId>
+                    <artifactId>bson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- https://stackoverflow.com/questions/58626347/springfox-swagger-not-working-in-spring-boot-2-2-0-->
+        <dependency>
+            <groupId>io.springfox</groupId>
+            <artifactId>springfox-swagger2</artifactId>
+            <version>2.9.2</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>io.springfox</groupId>
+            <artifactId>springfox-swagger-ui</artifactId>
+            <version>2.9.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+    </dependencies>
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+        </plugins>
+    </build>
+</project>
