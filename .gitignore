@@ -1,8 +1,36 @@
+### eAi ###
+ecosystem.properties
+copyall.sh
+ecosystem-BASE.properties
+ecosystem-ai.log
+*.log
+*.log.gz
+
+h2o/**
+workbench/node_modules/**
+docker-data/**
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+
 ### IntelliJ IDEA ###
 .idea
 *.iws
 *.iml
 *.ipr
+
+### NetBeans ###
+nbproject/private/**
+build/**
+nbbuild/**
+dist/**
+nbdist/**
+.nb-gradle/**
 
 ### ecosystem Local client specifics ###
 ecosystem-ai-repo/**
