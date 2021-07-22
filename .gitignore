@@ -1,1 +1,12 @@
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### ecosystem Local client specifics ###
+ecosystem-ai-repo/**
+target/**
+
+### Other ###
 .DS_Store

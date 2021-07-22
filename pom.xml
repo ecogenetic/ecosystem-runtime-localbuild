@@ -2,18 +2,19 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.2.8.RELEASE</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
     <groupId>com.ecosystem.local</groupId>
     <artifactId>ecosystem-runtime-localbuild</artifactId>
     <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <name>Ecosystem.Ai Client Pulse Responder (Runtime Real-time Scoring)</name>
-
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.2.6.RELEASE</version>
-    </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -23,22 +24,25 @@
     </properties>
 
     <repositories>
-        <repository>
-            <id>internal.repo</id>
-            <name>Temporary Staging Repository</name>
-            <url>file://${project.build.directory}/mvn-repo</url>
-        </repository>
+<!--        <repository>-->
+<!--            <id>internal.repo</id>-->
+<!--            <name>Temporary Staging Repository</name>-->
+<!--            <url>file://${project.build.directory}/mvn-repo</url>-->
+<!--        </repository>-->
+<!--        <repository>-->
+<!--            <id>ecosystem-remote-repo</id>-->
+<!--            <url>http://customer.ecosystem.ai/ecosystem-runtime-0.8.5.0.jar</url>-->
+<!--        </repository>-->
     </repositories>
 
     <dependencies>
-
         <dependency>
             <groupId>com.ecosystem</groupId>
             <artifactId>ecosystem-runtime</artifactId>
             <version>0.8.5.0</version>
             <scope>system</scope>
             <systemPath>
-                /Users/jayvanzyl/Documents/Projects/ecosystem-ai-next/ecosystem-runtime-localbuild/target/mvn-repo/com/ecosystem/ecosystem-runtime/0.8.5.0/ecosystem-runtime-0.8.5.0.jar
+                /Users/jayvanzyl/Documents/Projects/ecosystem-ai-next/ecosystem-runtime-module/target/ecosystem-runtime-0.8.5.0.jar
             </systemPath>
         </dependency>
 
@@ -125,8 +129,6 @@
             <optional>true</optional>
         </dependency>
 
-
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -144,7 +146,20 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.opennlp</groupId>
+            <artifactId>opennlp-tools</artifactId>
+            <version>1.9.0</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_2.13</artifactId>
+            <version>2.8.0</version>
+        </dependency>
     </dependencies>
+
     <build>
         <finalName>${project.artifactId}</finalName>
         <plugins>
@@ -152,6 +167,14 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                </configuration>
             </plugin>
 
         </plugins>
