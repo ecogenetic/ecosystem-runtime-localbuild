@@ -1,3 +1,6 @@
+/**
+ * PLEASE DO NOT ALTER WITHOUT CHECKING WITH AN ECOSYSTEM.AI SPECIALIST
+ */
 package com.ecosystem.runtime;
 
 import org.springframework.boot.SpringApplication;
