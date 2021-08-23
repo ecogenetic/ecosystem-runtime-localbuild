@@ -1,5 +1,5 @@
 /**
-* Refresh product matrix and master
+* SETUP YOUR REST ENDPOINT DEFINITION.
 *
 */
 
