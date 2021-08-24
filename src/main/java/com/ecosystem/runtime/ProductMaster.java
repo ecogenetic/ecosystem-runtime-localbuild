@@ -91,6 +91,7 @@ public class ProductMaster {
 
 
     /**
+     * PLEASE DO NOT ALTER THIS
      * Refresh product matrix and master
      *
      * @return Result
@@ -889,11 +890,11 @@ public class ProductMaster {
     /**************************************************************************************************************/
 
 
-/**
- * CORE RUNTIME FEATURES FROM GENERATION 2
- */
+    /**
+     * CORE RUNTIME FEATURES FROM GENERATION 2
+     */
 
-/**
+    /**
      * Model details. Example parameter: {'mojo':'my_mojo.zip'}
      *
      * @param valueJSON JSON parameter: {'mojo':'my_mojo.zip'}
@@ -951,125 +952,71 @@ public class ProductMaster {
         }
     }
 
-/**
- * Score model from pre-loaded mojo as set in the properties file
- *
- * @param valueJSON Example: {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'},'mojo':'1', 'input':['x','y'], 'value':['val_x','val_y']} OR {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'}, 'mojo':'1', 'dbparam':true, lookup:{key:'customer',value:'1234567890'} }
- * @param detail    Detail to return: all, basic or none
- * @return Result
- */
-@ApiOperation(value = "Perform prediction on pre-loaded model with detail and push onto Kafka topic: none, basic or all. Perform a database lookup if properties file has been set. " +
-        "Example parameter: Example: {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'},'mojo':'1', 'input':['x','y'], 'value':['val_x','val_y']} OR {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'}, 'mojo':'1', 'dbparam':true, lookup:{key:'customer',value:'1234567890'} }" +
-        "", response = String.class)
-@RequestMapping(value = "/predictorResponsePreLoadKafKa", method = RequestMethod.GET)
-public String predictorResponsePreLoadKafKa(
-        @RequestParam(value = "value",
-                defaultValue = "{'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'},'mojo':'1', 'input':['x','y'], 'value':['val_x','val_y']} " +
-                        "OR {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'}, 'mojo':'1', 'dbparam':true, lookup:{key:'customer',value:'1234567890'} }") String valueJSON,
-        @RequestParam(value = "detail",
-                defaultValue = "none") String detail) {
-    LOGGER.info("/predictorResponsePreLoadKafKa params: " + valueJSON);
-    try {
-        JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
-        return ecosystemMaster.getPredictionResultToKafka(params);
-    } catch (Exception e) {
-        LOGGER.error("PredictorMaster:predictorResponsePreLoadKafKa:E000: Param error: " + e);
-        return "{\"ErrorMessage\":\"PredictorMaster:predictorResponsePreLoadKafKa:E000-1: Parameter error.\"}";
+    /**
+     * Score model from pre-loaded mojo as set in the properties file
+     *
+     * @param valueJSON Example: {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'},'mojo':'1', 'input':['x','y'], 'value':['val_x','val_y']} OR {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'}, 'mojo':'1', 'dbparam':true, lookup:{key:'customer',value:'1234567890'} }
+     * @param detail    Detail to return: all, basic or none
+     * @return Result
+     */
+    @ApiOperation(value = "Perform prediction on pre-loaded model with detail and push onto Kafka topic: none, basic or all. Perform a database lookup if properties file has been set. " +
+            "Example parameter: Example: {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'},'mojo':'1', 'input':['x','y'], 'value':['val_x','val_y']} OR {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'}, 'mojo':'1', 'dbparam':true, lookup:{key:'customer',value:'1234567890'} }" +
+            "", response = String.class)
+    @RequestMapping(value = "/predictorResponsePreLoadKafKa", method = RequestMethod.GET)
+    public String predictorResponsePreLoadKafKa(
+            @RequestParam(value = "value",
+                    defaultValue = "{'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'},'mojo':'1', 'input':['x','y'], 'value':['val_x','val_y']} " +
+                            "OR {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'}, 'mojo':'1', 'dbparam':true, lookup:{key:'customer',value:'1234567890'} }") String valueJSON,
+            @RequestParam(value = "detail",
+                    defaultValue = "none") String detail) {
+        LOGGER.info("/predictorResponsePreLoadKafKa params: " + valueJSON);
+        try {
+            JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
+            return ecosystemMaster.getPredictionResultToKafka(params);
+        } catch (Exception e) {
+            LOGGER.error("PredictorMaster:predictorResponsePreLoadKafKa:E000: Param error: " + e);
+            return "{\"ErrorMessage\":\"PredictorMaster:predictorResponsePreLoadKafKa:E000-1: Parameter error.\"}";
+        }
+
     }
 
-}
+    /**
+     * Score model from pre-loaded mojo as set in the properties file
+     *
+     * @param valueJSON Example: {'name':'predict1', 'mojo':'1','dbparam':true, lookup:{key:'customer_id',value:724578004}} OR if parameter is not
+     *                  from database use: {'name':'predict1', 'mojo':'1..3','dbparam':false, 'input':['x','y'], 'value':['val_x','val_y']}
+     *                  Use x:n to define the number of predictions to return as primary result, if the overall probability is not used.
+     *                  Optional 'resultcount':3  if not present in parameter, then return one item
+     * @param detail    Detail to return: all, basic or none
+     * @return Result
+     */
+    @ApiOperation(value = "Perform prediction on pre-loaded model with detail: none, basic or all. Perform a database lookup if properties file has been set. " +
+            "The predictor parameters are broken into two types namely, requiring all parameters via API or requiring a lookup key via API and extracting parameters " +
+            "from a data source." +
+            "Use this format for input prams only:" +
+            "{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':false,'input': ['x','y'],'value': ['val_x', 'val_y']}" +
+            "Use this approach for inputs from data source:" +
+            "{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':true, lookup:{key:'customer',value:1234567890}} " +
+            "If there is post-scoring logic, then ise this configuration:" +
+            "{'name':'predict1', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'customer',value:1234567890}, param:{key:'value_field', value:30}}" +
+            "", response = String.class)
+    @RequestMapping(value = "/predictorResponsePreLoad", method = RequestMethod.GET)
+    public String predictorResponsePreLoad(
+            @RequestParam(value = "value",
+                    defaultValue = "{'name':'predict1', 'mojo':'1..16','dbparam':false, 'input':['x','y'], 'value':['val_x','val_y'], 'x':1} " +
+                            "OR {'name':'predict1', 'mojo':'1','dbparam':true, lookup:{key:'customer',value:'1234567890'}} + " +
+                            "OR {'name':'predict1', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'customer',value:1234567890}, param:{key:'value_field', value:30}, resultcount:3}") String valueJSON,
+            @RequestParam(value = "detail",
+                    defaultValue = "all") String detail) {
+        LOGGER.info("/predictorResponsePreLoad params: " + valueJSON);
+        try {
+            JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
+            return ecosystemMaster.getPredictionResult(params).toString().intern();
+        } catch (Exception e) {
+            LOGGER.error("PredictorMaster:predictorResponsePreLoad:E000: Param error: " + e);
+            return "{\"ErrorMessage\":\"PredictorMaster:predictorResponsePreLoad:E000-1: Parameter error.\"}";
+        }
 
-/**
- * Score model from pre-loaded mojo as set in the properties file
- *
- * @param valueJSON Example: {'name':'predict1', 'mojo':'1','dbparam':true, lookup:{key:'customer_id',value:724578004}} OR if parameter is not
- *                  from database use: {'name':'predict1', 'mojo':'1..3','dbparam':false, 'input':['x','y'], 'value':['val_x','val_y']}
- *                  Use x:n to define the number of predictions to return as primary result, if the overall probability is not used.
- *                  Optional 'resultcount':3  if not present in parameter, then return one item
- * @param detail    Detail to return: all, basic or none
- * @return Result
- */
-@ApiOperation(value = "Perform prediction on pre-loaded model with detail: none, basic or all. Perform a database lookup if properties file has been set. " +
-        "The predictor parameters are broken into two types namely, requiring all parameters via API or requiring a lookup key via API and extracting parameters " +
-        "from a data source." +
-        "Use this format for input prams only:" +
-        "{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':false,'input': ['x','y'],'value': ['val_x', 'val_y']}" +
-        "Use this approach for inputs from data source:" +
-        "{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':true, lookup:{key:'customer',value:1234567890}} " +
-        "If there is post-scoring logic, then ise this configuration:" +
-        "{'name':'predict1', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'customer',value:1234567890}, param:{key:'value_field', value:30}}" +
-        "", response = String.class)
-@RequestMapping(value = "/predictorResponsePreLoad", method = RequestMethod.GET)
-public String predictorResponsePreLoad(
-        @RequestParam(value = "value",
-                defaultValue = "{'name':'predict1', 'mojo':'1..16','dbparam':false, 'input':['x','y'], 'value':['val_x','val_y'], 'x':1} " +
-                        "OR {'name':'predict1', 'mojo':'1','dbparam':true, lookup:{key:'customer',value:'1234567890'}} + " +
-                        "OR {'name':'predict1', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'customer',value:1234567890}, param:{key:'value_field', value:30}, resultcount:3}") String valueJSON,
-        @RequestParam(value = "detail",
-                defaultValue = "all") String detail) {
-    LOGGER.info("/predictorResponsePreLoad params: " + valueJSON);
-    try {
-        JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
-        return ecosystemMaster.getPredictionResult(params).toString().intern();
-    } catch (Exception e) {
-        LOGGER.error("PredictorMaster:predictorResponsePreLoad:E000: Param error: " + e);
-        return "{\"ErrorMessage\":\"PredictorMaster:predictorResponsePreLoad:E000-1: Parameter error.\"}";
     }
-
-}
-
-////    /**
-////     * Score model with all enabling scoring options including database parameters.
-////     * @param valueJSON JSON Parameter: {'name':'predict1', 'mojo':'model_mojo.zip','dbparam':false,'input': ['x','y'],'value': ['val_x', 'val_y']} OR {'name':'predict1', 'mojo':'model_mojo.zip','dbparam':true, lookup:{key:'customer',value:1234567890}}
-////     * @param detail Detail to return: all, basic or none
-////     * @return Result
-////     * @throws IOException Error
-////     */
-////    @ApiOperation(value = "Perform prediction on model with detail: none, basic or all. Paramter examples: " +
-////			"{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':false,'input': ['x','y'],'value': ['val_x', 'val_y']} " +
-////			"OR {'name':'predict1', 'mojo':'model_mojo.zip','dbparam':true, lookup:{key:'customer',value:1234567890}}" +
-////			"", response = String.class)
-////    @RequestMapping(value="/predictorResponse", method = RequestMethod.GET)
-////    public String predictorResponse(
-////            @RequestParam(value="value",
-////                    defaultValue="{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':false,'input': ['x','y'],'value': ['val_x', 'val_y']} " +
-////                            "OR {'name':'predict1', 'mojo':'model_mojo.zip','dbparam':true, lookup:{key:'customer',value:1234567890}}") String valueJSON,
-////            @RequestParam(value="detail",
-////                    defaultValue="none") String detail)
-////            throws Exception {
-////        LOGGER.info("/predictorResponse params: " + valueJSON);
-////        long startTime = System.nanoTime();
-////        JSONObject logStats = new JSONObject();
-////        logStats.put("start_date", du.nowDate());
-////		String uuid = UUID.randomUUID().toString().intern();
-////        /*
-////        detail:
-////        1. none: no model details or statistic
-////        2. basic: response and probabilities
-////        3. all: response, probabilities, domains
-////        */
-////        JSONObject params = new JSONObject(valueJSON);
-////		params = PrePredictStageOne.prePredictParams(params, models[0], models, session);
-////		params = PrePredictStageOne.prePredict(params, models[0], models, session);
-////
-////        if (params.has("input")) {
-////            ModelMojoWorkerH2O uPd = new ModelMojoWorkerH2O();
-////            String predictResult = PostPredictStageOne.postPredict(
-////                    uPd.runModelMojo(params.toString().intern(), detail), params, session)
-////                    .toString().intern();
-////            long endTime = System.nanoTime();
-////            LOGGER.info("predictorResponse: Execution time in ms: " + (endTime - startTime) / 1000000);
-////			logStats.put("predictor", params.getString("name"));
-////			logStats.put("model", params.getString("mojo"));
-////            logStats.put("end_date", du.nowDate());
-////            logStats.put("duration", (endTime - startTime) / 1000000);
-////			logStats.put("runtime_version", settings.version);
-////            if (loggingCollection != null) addLoggingAsync(loggingCollection, params.toString().intern(), predictResult, logStats.toString().intern(), uuid);
-////            return predictResult;
-////        } else {
-////            return "{\"ErrorMessage\":\"No 'input' parameter, or no data for input.\"}";
-////        }
-////    }
-
 
 }

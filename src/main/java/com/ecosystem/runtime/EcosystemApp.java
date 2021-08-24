@@ -36,6 +36,7 @@ import java.util.Collections;
 		MongoRepositoriesAutoConfiguration.class,
 		MongoAutoConfiguration.class
 })
+
 public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	public static String version;
 
