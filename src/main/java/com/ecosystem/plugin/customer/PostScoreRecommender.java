@@ -63,13 +63,7 @@ public class PostScoreRecommender {
 			JSONArray probabilities = predictModelMojoResult.getJSONArray("probability");
 			JSONArray domains = predictModelMojoResult.getJSONArray("domains");
 
-			//JSONArray offerMatrix = params.getJSONArray("offerMatrix");
 			JSONObject work = params.getJSONObject("in_params");
-
-			/* Personality and base spend score */
-			//			JSONObject dynamic_engagement = (JSONObject) ((JSONArray) ((
-			//					(JSONObject) params.getJSONObject("preloadCorpora")
-			//							.get("dynamic_engagement")).get("data"))).get(0);
 
 			JSONArray finalOffers = new JSONArray();
 			int offerIndex = 0;

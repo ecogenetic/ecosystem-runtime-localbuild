@@ -113,15 +113,16 @@ public class PostScoreBalanceEnquiry {
 				}
 
 				/* get selector field from properties: predictor.selector.setup */
-				String s = new JSONObject(settings.getSelectorSetup()).getJSONObject("lookup").getString("fields");
+				//String s = new JSONObject(settings.getSelectorSetup()).getJSONObject("lookup").getString("fields");
+                String s = new String("payment_method_code");
 
 				if (!offerMatrix.getJSONObject(i).has(s)) { LOGGER.error("Not in offerMatrix: ".concat(s)); break; }
 				if (!featuresObj.has(s)) { LOGGER.error("Not in featuresObj: " + s); break; }
 
-				String payment_method_code = (String) featuresObj.get("payment_method_code");
-				if (payment_method_code.equalsIgnoreCase("h")){
-					payment_method_code = "p";
-				}
+                String payment_method_code = (String) featuresObj.get("payment_method_code");
+                if (payment_method_code.equalsIgnoreCase("h")){
+                    payment_method_code = "p";
+                }
 
 				if (offerMatrix.getJSONObject(i).getString(s).equalsIgnoreCase(payment_method_code)) {
 					String cop_car = singleOffer.getString("cop_car").toLowerCase();
@@ -147,8 +148,11 @@ public class PostScoreBalanceEnquiry {
 							LOGGER.error("PostScoreBalanceEnquiry:offerRecommender:E002-1: " + params.get("uuid") + " - Not available: " + singleOffer.getString("offer_name_final"));
 						}
 
+                        if (offerMatrix.getJSONObject(i).getString("offer_type").equals("Voice"))
+							offer_score = 0.5;
+
 						double modified_offer_score = 1.0;
-						boolean offerTypeRule = (preferred.equalsIgnoreCase("Any") | preferred.equalsIgnoreCase(singleOffer.getString("offer_type")));
+                        boolean offerTypeRule = (preferred.equalsIgnoreCase("Any") | preferred.equalsIgnoreCase(singleOffer.getString("offer_type")));
 
 						if ((preferred.equals("Any") | (preferred.equals(singleOffer.getString("offer_type"))))) {
 							modified_offer_score = offer_score * (double) singleOffer.optInt("offer_weight");
@@ -186,14 +190,14 @@ public class PostScoreBalanceEnquiry {
 						boolean rule1 = (in_balance > 0.0 & singleOffer.getDouble("price") < in_balance);
 						boolean rule2 = (in_balance <= 0);
 
-						String whitelist_only = "y";
-						if (singleOffer.has("whitelist_only_yn")) whitelist_only = singleOffer.getString("whitelist_only_yn");
-						boolean rule3 = (whitelist_only.equalsIgnoreCase("n") | whitelist_only.equalsIgnoreCase("y") & whitelist);
+                        String whitelist_only = "y";
+				        if (singleOffer.has("whitelist_only_yn")) whitelist_only = singleOffer.getString("whitelist_only_yn");
+                        boolean rule3 = (whitelist_only.equalsIgnoreCase("n") | whitelist_only.equalsIgnoreCase("y") & whitelist);
 
 						if(rule3){
-							if (rule1 | rule2) ruleSelect = true;
-							if (whitelist) ruleSelect = true;
-						}
+                            if (rule1 | rule2) ruleSelect = true;
+                            if (whitelist) ruleSelect = true;
+                        }
 
 						/* eligible for offer */
 						if (ruleSelect) {
