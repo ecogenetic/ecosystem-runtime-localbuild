@@ -2,6 +2,25 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!--    run settings
+    Setup run configuration
+    1. maven with goal: clean package (this will download dependencies)
+    2. Application with main class: com.ecosystem.runtime.EcosystemApp (this will create a deployable jar)
+    -->
+
+    <!--    settings.xml in ~/.m2/
+    <settings>
+        <mirrors>
+          <mirror>
+              <id>ecosystem-repo</id>
+              <name>Maven Repository Manager running on customer.ecosystem.ai</name>
+              <url>http://maven.ecosystem.ai:50000/maven-repository</url>
+              <mirrorOf>ecosystem-repo</mirrorOf>
+          </mirror>
+        </mirrors>
+    </settings>
+    -->
+
     <!-- PLEASE DO NOT ALTER THIS POM FILE WITHOUT CHECKING WITH AN ECOSYSTEM.AI SPECIALIST-->
 
     <parent>
@@ -25,18 +44,6 @@
         <docker.image.prefix>${user.name}</docker.image.prefix>
     </properties>
 
-<!--    settings.xml in .m2
-<settings>
-    <mirrors>
-      <mirror>
-          <id>ecosystem-repo</id>
-          <name>Maven Repository Manager running on customer.ecosystem.ai</name>
-          <url>http://maven.ecosystem.ai:50000/maven-repository</url>
-          <mirrorOf>ecosystem-repo</mirrorOf>
-      </mirror>
-    </mirrors>
-</settings>
--->
     <repositories>
         <repository>
             <id>ecosystem-repo</id>
@@ -48,7 +55,7 @@
         <dependency>
             <groupId>com.ecosystem</groupId>
             <artifactId>ecosystem-runtime</artifactId>
-            <version>0.8.5.0</version>
+            <version>0.9.0.0</version>
         </dependency>
         <dependency>
             <groupId>com.datastax.oss</groupId>
