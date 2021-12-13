@@ -24,11 +24,12 @@
         <java.version>11</java.version>
         <docker.image.prefix>${user.name}</docker.image.prefix>
     </properties>
+<!--    <url>scp://customer.ecosystem.ai:8888/Users/developer/maven-repository</url>-->
 
     <repositories>
         <repository>
             <id>ecosystem-repo</id>
-            <url>scp://customer.ecosystem.ai/Users/developer/maven-repository</url>
+            <url>scp://customer.ecosystem.ai:8888/maven-repository</url>
         </repository>
     </repositories>
 
