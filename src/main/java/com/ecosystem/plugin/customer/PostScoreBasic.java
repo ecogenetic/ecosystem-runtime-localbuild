@@ -17,9 +17,9 @@ import java.util.ArrayList;
 import static com.ecosystem.EcosystemResponse.obtainBudget;
 
 /**
- * This the ecosystem/Ai personality series.
- * Customer plugin for specialized logic to be added to the runtime engine. This class is loaded through the plugin
- * loader system.
+ * This the ecosystem/Ai generic post-score template.
+ * Customer plugin for specialized logic to be added to the runtime engine.
+ * This class is loaded through the plugin loader system.
  */
 public class PostScoreBasic {
     private static final Logger LOGGER = LogManager.getLogger(PostScoreBasic.class.getName());
@@ -54,6 +54,7 @@ public class PostScoreBasic {
      * @return JSONObject result to further post-scoring logic
      */
     public static JSONObject getPostPredict(JSONObject predictModelMojoResult, JSONObject params, CqlSession session, EasyPredictModelWrapper[] models) {
+        double startTimePost = System.nanoTime();
         try {
             /* Setup JSON objects for specific prediction case */
             JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
@@ -71,96 +72,184 @@ public class PostScoreBasic {
             }
 
             JSONArray finalOffers = new JSONArray();
-
+            int resultcount = (int) params.get("resultcount");
             /* For each offer in offer matrix determine eligibility */
-            int offerIndex = 0;
             /* get selector field from properties: predictor.selector.setup */
-            String s = new JSONObject(settings.getSelectorSetup()).getJSONObject("lookup").getString("fields");
+            // String s = new JSONObject(settings.getSelectorSetup()).getJSONObject("lookup").getString("fields");
 
+            /** This loop can be used to add number of offers/options to return result */
             JSONObject finalOffersObject = new JSONObject();
-            finalOffersObject.put("offer_name", featuresObj.getString("offer_name_final"));
-            finalOffersObject.put("score", domainsProbabilityObj);
-            finalOffersObject.put("offer_value", 0.0);
+            int offerIndex = 0;
+            for (int i = 0; i < resultcount; i++) {
 
-            finalOffersObject.put("offer_matrix", featuresObj);
+                /** Model type based approaches */
+                String type = "";
+                type = predictModelMojoResult.getJSONArray("type").getString(0);
 
-            // TODO OBTAIN BUDGET PRIORITY AND ASSIGN
-            if (settings.getPredictorOfferBudget() != null) {
-                JSONObject budgetItem = obtainBudget(featuresObj, params.getJSONObject("featuresObj"), 0.0);
-                double budgetSpendLimit = budgetItem.getDouble("spend_limit");
-                finalOffersObject.put("spend_limit", budgetSpendLimit);
+                /** Offer name, defaults to type (replace with offer matrix etc) */
+                if (featuresObj.has("offer_name_final"))
+                    finalOffersObject.put("offer_name", featuresObj.getString("offer_name_final"));
+                else
+                    finalOffersObject.put("offer_name", type);
+
+                if (featuresObj.has("offer"))
+                    finalOffersObject.put("offer", featuresObj.getString("offer"));
+                else
+                    finalOffersObject.put("offer", type);
+
+                /** Score based on model type */
+                if (type.equals("Clustering")) {
+                    finalOffersObject.put("cluster", predictModelMojoResult.getJSONArray("cluster").get(0));
+                    finalOffersObject.put("score", DataTypeConversions.getDouble(domainsProbabilityObj, "score"));
+                    finalOffersObject.put("modified_offer_score", DataTypeConversions.getDouble(domainsProbabilityObj, "score"));
+                } else if (type.equals("AnomalyDetection")) {
+                    double[] score = (double[]) domainsProbabilityObj.get("score");
+                    finalOffersObject.put("score", score[0]);
+                    finalOffersObject.put("modified_offer_score", score[0]);
+                } else if (type.equals("regression")) {
+                    Object score = predictModelMojoResult.getJSONArray("value").get(0);
+                    finalOffersObject.put("score", score);
+                    finalOffersObject.put("modified_offer_score", score);
+                } else if (type.equals("multinomial")) {
+                    Object probability = predictModelMojoResult.getJSONArray("probability").get(0);
+                    Object label = predictModelMojoResult.getJSONArray("label").get(0);
+                    Object response = predictModelMojoResult.getJSONArray("response").get(0);
+                    finalOffersObject.put("score", probability);
+                    finalOffersObject.put("modified_offer_score", probability);
+                    finalOffersObject.put("offer", label);
+                    finalOffersObject.put("offer_name", response);
+                } else {
+                    finalOffersObject.put("score", 1.0);
+                    finalOffersObject.put("modified_offer_score", 1.0);
+                }
+
+                finalOffersObject.put("offer_details", domainsProbabilityObj);
+
+                /** Default value, could be replaced by offer matrix or feature store */
+                double offer_value = 1.0;
+                finalOffersObject.put("offer_value", offer_value);
+
+                /** Add other structures to the final result */
+                finalOffersObject.put("offer_matrix", featuresObj);
+
+                /** Budget processing option, if it's set in the properties */
+                if (settings.getPredictorOfferBudget() != null) {
+                    JSONObject budgetItem = obtainBudget(featuresObj, params.getJSONObject("featuresObj"), offer_value);
+                    double budgetSpendLimit = budgetItem.getDouble("spend_limit");
+                    finalOffersObject.put("spend_limit", budgetSpendLimit);
+                }
+
+                /** Prepare offer array before final sorting */
+                finalOffers.put(offerIndex, finalOffersObject);
+                offerIndex = offerIndex + 1;
             }
 
-            finalOffers.put(offerIndex, finalOffersObject);
-            JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "modified_offer_score", "double", "d");
+            /** Sort final offer list based on score */
+            JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "score", "double", "d");
             predictModelMojoResult.put("final_result", sortJsonArray);
 
         } catch (Exception e) {
             LOGGER.error(e);
         }
 
+        /** Get top scores and test for explore/exploit randomization */
         predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+
+        double endTimePost = System.nanoTime();
+        LOGGER.info("getPostPredict:I001: execution time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
         return predictModelMojoResult;
-
-    }
-
-    public void offerRecommender() {
     }
 
     /**
-     * Review this: Master version in EcosystemMaster class.
-     *
-     * @param predictResult
-     * @param numberOffers
-     * @return
-     */
-    public static JSONArray getSelectedPredictResult(JSONObject predictResult, int numberOffers) {
-        JSONArray offers = new JSONArray();
-
-        for (int j = 0; j < numberOffers; j++) {
-            JSONObject work = predictResult.getJSONArray("final_result").getJSONObject(j);
-            JSONObject offer = new JSONObject();
-            offer.put("rank", j + 1);
-            offer.put("result", setValues(work));
-            offer.put("offer_matrix", work.getJSONObject("offer_matrix"));
-            offers.put(j, offer);
-        }
-        return offers;
-    }
-
-    /**
-     * Review this: Master version in EcosystemMaster class.
      * Get random results for MAB
-     *
      * @param predictResult
      * @param numberOffers
      * @return
      */
     public static JSONArray getSelectedPredictResultRandom(JSONObject predictResult, int numberOffers) {
-        JSONArray offers = new JSONArray();
-        /* If there's no 'final' return an empty array */
-        if (predictResult.has("final_result")) {
-            int resultLength = predictResult.getJSONArray("final_result").length() - 1;
-            for (int j = 0; j < numberOffers; j++) {
-                int rand = MathRandomizer.getRandomIntBetweenRange(0, resultLength);
-                JSONObject work = predictResult.getJSONArray("final_result").getJSONObject(rand);
-                JSONObject offer = new JSONObject();
-                offer.put("rank", j+1);
-                offer.put("result", setValues(work));
-                offer.put("offer_matrix", work.getJSONObject("offer_matrix"));
-                offers.put(j, offer);
-            }
-        }
-        return offers;
+        return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 1);
+    }
+
+    /**
+     * Get result based on score
+     * @param predictResult
+     * @param numberOffers
+     * @return
+     */
+    public static JSONArray getSelectedPredictResult(JSONObject predictResult, int numberOffers) {
+        return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 0);
     }
 
     private static JSONObject setValues(JSONObject work) {
         JSONObject result = new JSONObject();
         result.put("score", work.get("score"));
+        result.put("final_score", work.get("score"));
+        result.put("offer", work.get("offer"));
         result.put("offer_name", work.get("offer_name"));
+        result.put("offer_details", work.get("offer_details"));
         result.put("modified_offer_score", work.get("modified_offer_score"));
         result.put("offer_value", work.get("offer_value"));
         return result;
+    }
+
+    /**
+     * Set values JSONObject that will be used in final
+     * @param work
+     * @param rank
+     * @return
+     */
+    private static JSONObject setValuesFinal(JSONObject work, int rank) {
+        JSONObject offer = new JSONObject();
+
+        offer.put("rank", rank);
+        offer.put("result", setValues(work));
+        offer.put("result_full", work);
+
+        return offer;
+    }
+
+
+    /**
+     * Review this: Master version in EcosystemMaster class. {offer_treatment_code: {$regex:"_A"}}
+     *
+     * @param predictResult
+     * @param numberOffers
+     * @return
+     */
+    public static JSONArray getSelectedPredictResultExploreExploit(JSONObject predictResult, int numberOffers, int explore) {
+        JSONArray offers = new JSONArray();
+        int resultLength = predictResult.getJSONArray("final_result").length();
+
+        for (int j = 0, k = 0; j < resultLength; j++) {
+            JSONObject work = new JSONObject();
+            if (explore == 1) {
+                int rand = MathRandomizer.getRandomIntBetweenRange(0, resultLength - 1);
+                work = predictResult.getJSONArray("final_result").getJSONObject(rand);
+            } else {
+                work = predictResult.getJSONArray("final_result").getJSONObject(j);
+            }
+
+            /* test if budget is enabled && spend_limit is greater than 0, if budget is disabled, then this will be 1.0 */
+            if (settings.getPredictorOfferBudget() != null) {
+                /* if budget setting and there is budget to spend */
+                if (work.has("spend_limit")) {
+                    if ((work.getDouble("spend_limit") > 0.0) | work.getDouble("spend_limit") == -1) {
+                        offers.put(k, setValuesFinal(work, k + 1));
+                        if ((k + 1) == numberOffers) break;
+                        k = k + 1;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                /* no budget setting present */
+                offers.put(k, setValuesFinal(work, k + 1));
+                if ((k + 1) == numberOffers) break;
+                k = k + 1;
+            }
+        }
+
+        return offers;
     }
 
     /**
@@ -176,10 +265,10 @@ public class PostScoreBasic {
 
         /* depending on epsilon and mab settings */
         if (params.getInt("explore") == 0) {
-            predictResult.put("final_result", PostScoreBasic.getSelectedPredictResult(predictResult, resultCount));
+            predictResult.put("final_result", getSelectedPredictResult(predictResult, resultCount));
             predictResult.put("explore", 0);
         } else {
-            predictResult.put("final_result", PostScoreBasic.getSelectedPredictResultRandom(predictResult, resultCount));
+            predictResult.put("final_result", getSelectedPredictResultRandom(predictResult, resultCount));
             predictResult.put("explore", 1);
         }
         return predictResult;
