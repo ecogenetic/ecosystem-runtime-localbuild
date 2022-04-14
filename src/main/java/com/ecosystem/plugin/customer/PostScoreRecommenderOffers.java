@@ -12,17 +12,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.util.ArrayList;
-
-import static com.ecosystem.EcosystemResponse.obtainBudget;
 
 /**
- * This the ecosystem/Ai generic post-score template.
- * Customer plugin for specialized logic to be added to the runtime engine.
- * This class is loaded through the plugin loader system.
+ * recommender_smp - Single model for all products with Offermatrix
+ * Multiclass classifier trained on offer_name response column, offer matrix need to have all the offers loaded with offer_price.
+ * 29 March 2022
  */
-public class PostScoreBasic {
-    private static final Logger LOGGER = LogManager.getLogger(PostScoreBasic.class.getName());
+public class PostScoreRecommenderOffers {
+    private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommenderOffers.class.getName());
 
     static GlobalSettings settings;
     static {
@@ -35,7 +32,7 @@ public class PostScoreBasic {
         }
     }
 
-    public PostScoreBasic() {
+    public PostScoreRecommenderOffers() {
     }
 
     /**
@@ -50,115 +47,106 @@ public class PostScoreBasic {
      * @param predictModelMojoResult Result from scoring
      * @param params                 Params carried from input
      * @param session                Session variable for Cassandra
-     * @param models 				 Preloaded H2O Models
      * @return JSONObject result to further post-scoring logic
      */
     public static JSONObject getPostPredict(JSONObject predictModelMojoResult, JSONObject params, CqlSession session, EasyPredictModelWrapper[] models) {
         double startTimePost = System.nanoTime();
         try {
+            /** Value obtained via API params */
+            JSONObject work = params.getJSONObject("in_params");
+            double in_balance = 1000.0;
+            if (work.has("in_balance"))
+                in_balance = DataTypeConversions.getDouble(work, "in_balance");
+            else
+                LOGGER.info("getPostPredict:I001aa: No in_balance specified, default used. (1000.00)");
+
+            JSONArray sortJsonArray = new JSONArray();
+            JSONArray finalOffers = new JSONArray();
+
             /* Setup JSON objects for specific prediction case */
             JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
-            JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
-
-            /* If whitelist settings then only allow offers on list */
-            boolean whitelist = false;
-            ArrayList<String> offerWhiteList = new ArrayList<>();
-            if (params.has("whitelist")) {
-                if (!params.getJSONObject("whitelist").isEmpty()) {
-                    offerWhiteList = (ArrayList<String>) params.getJSONObject("whitelist").get("whitelist");
-                    params.put("resultcount", offerWhiteList.size());
-                    whitelist = DataTypeConversions.getBooleanFromString(params.getJSONObject("whitelist").get("logicin"));
-                }
+            if (predictModelMojoResult.has("ErrorMessage")) {
+                LOGGER.error("getPostPredict:E001a:" + predictModelMojoResult.get("ErrorMessage"));
+                return null;
             }
 
-            JSONArray finalOffers = new JSONArray();
+            JSONArray offerMatrix = new JSONArray();
+            if (params.has("offerMatrix"))
+                offerMatrix = params.getJSONArray("offerMatrix");
+
+            JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
+            String label = predictModelMojoResult.getJSONArray("label").getString(0);
+            JSONArray domains = predictModelMojoResult.getJSONArray("domains");
+
             int resultcount = (int) params.get("resultcount");
-            /* For each offer in offer matrix determine eligibility */
-            /* get selector field from properties: predictor.selector.setup */
-            // String s = new JSONObject(settings.getSelectorSetup()).getJSONObject("lookup").getString("fields");
-
-            /** This loop can be used to add number of offers/options to return result */
-            JSONObject finalOffersObject = new JSONObject();
             int offerIndex = 0;
-            for (int i = 0; i < resultcount; i++) {
 
-                /** Model type based approaches */
-                String type = "";
-                type = predictModelMojoResult.getJSONArray("type").getString(0);
+            /** Select top items based on number of offers to present */
+            for (int i = 0; i < offerMatrix.length(); i++) {
+                JSONObject singleOffer = offerMatrix.getJSONObject(i);
 
-                /** Offer name, defaults to type (replace with offer matrix etc) */
-                if (featuresObj.has("offer_name_final"))
-                    finalOffersObject.put("offer_name", featuresObj.getString("offer_name_final"));
-                else
-                    finalOffersObject.put("offer_name", type);
+                int explore = (int) params.get("explore");
+                JSONObject finalOffersObject = new JSONObject();
 
-                if (featuresObj.has("offer"))
-                    finalOffersObject.put("offer", featuresObj.getString("offer"));
-                else
-                    finalOffersObject.put("offer", type);
-
-                /** Score based on model type */
-                if (type.equals("Clustering")) {
-                    finalOffersObject.put("cluster", predictModelMojoResult.getJSONArray("cluster").get(0));
-                    finalOffersObject.put("score", DataTypeConversions.getDouble(domainsProbabilityObj, "score"));
-                    finalOffersObject.put("modified_offer_score", DataTypeConversions.getDouble(domainsProbabilityObj, "score"));
-                } else if (type.equals("AnomalyDetection")) {
-                    double[] score = (double[]) domainsProbabilityObj.get("score");
-                    finalOffersObject.put("score", score[0]);
-                    finalOffersObject.put("modified_offer_score", score[0]);
-                } else if (type.equals("regression")) {
-                    Object score = predictModelMojoResult.getJSONArray("value").get(0);
-                    finalOffersObject.put("score", score);
-                    finalOffersObject.put("modified_offer_score", score);
-                } else if (type.equals("multinomial")) {
-                    Object probability = predictModelMojoResult.getJSONArray("probability").get(0);
-                    Object label = predictModelMojoResult.getJSONArray("label").get(0);
-                    Object response = predictModelMojoResult.getJSONArray("response").get(0);
-                    finalOffersObject.put("score", probability);
-                    finalOffersObject.put("modified_offer_score", probability);
-                    finalOffersObject.put("offer", label);
-                    finalOffersObject.put("offer_name", response);
+                double offer_value = singleOffer.getDouble("offer_price");
+                double p = 0.0;
+                String offer_name = "";
+                if (domainsProbabilityObj.has(singleOffer.getString("offer_name"))) {
+                    offer_name = singleOffer.getString("offer_name");
+                    p = domainsProbabilityObj.getDouble(offer_name);
                 } else {
-                    finalOffersObject.put("score", 1.0);
-                    finalOffersObject.put("modified_offer_score", 1.0);
+                    LOGGER.error("offerRecommender:E002-1: " + params.get("uuid") + " - Not available: " + singleOffer.getString("offer_name"));
                 }
 
-                finalOffersObject.put("offer_details", domainsProbabilityObj);
+                finalOffersObject.put("offer", singleOffer.get("offer_id"));
+                finalOffersObject.put("offer_name", offer_name);
+                finalOffersObject.put("offer_name_desc", offer_name + " - " + i);
 
-                /** Default value, could be replaced by offer matrix or feature store */
-                double offer_value = 1.0;
-                finalOffersObject.put("offer_value", offer_value);
+                /** process final */
+                // double p = domainsProbabilityObj.getDouble(label);
+                finalOffersObject.put("score", p);
+                finalOffersObject.put("final_score", p);
+                finalOffersObject.put("modified_offer_score", p);
+                finalOffersObject.put("offer_value", offer_value); // use value from offer matrix
 
-                /** Add other structures to the final result */
-                finalOffersObject.put("offer_matrix", featuresObj);
+                finalOffersObject.put("p", p);
+                finalOffersObject.put("explore", explore);
 
-                /** Budget processing option, if it's set in the properties */
-                if (settings.getPredictorOfferBudget() != null) {
-                    JSONObject budgetItem = obtainBudget(featuresObj, params.getJSONObject("featuresObj"), offer_value);
-                    double budgetSpendLimit = budgetItem.getDouble("spend_limit");
-                    finalOffersObject.put("spend_limit", budgetSpendLimit);
-                }
-
-                /** Prepare offer array before final sorting */
+                /** Prepare array before final sort */
                 finalOffers.put(offerIndex, finalOffersObject);
                 offerIndex = offerIndex + 1;
             }
 
-            /** Sort final offer list based on score */
-            JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "score", "double", "d");
+            sortJsonArray = JSONArraySort.sortArray(finalOffers, "score", "double", "d");
             predictModelMojoResult.put("final_result", sortJsonArray);
 
         } catch (Exception e) {
+            e.printStackTrace();
             LOGGER.error(e);
         }
 
-        /** Get top scores and test for explore/exploit randomization */
+        /** Top scores from final_result */
         predictModelMojoResult = getTopScores(params, predictModelMojoResult);
 
         double endTimePost = System.nanoTime();
-        LOGGER.info("getPostPredict:I001: execution time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
+        LOGGER.info("PostScoreRecommenderOffers:I001: time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
+
         return predictModelMojoResult;
+
     }
+
+    private static JSONObject getExplore(JSONObject params, double epsilonIn, String name) {
+        double rand = MathRandomizer.getRandomDoubleBetweenRange(0, 1);
+        double epsilon = epsilonIn;
+        params.put(name + "_epsilon", epsilon);
+        if (rand <= epsilon) {
+            params.put(name, 1);
+        } else {
+            params.put(name, 0);
+        }
+        return params;
+    }
+
 
     /**
      * Get random results for MAB
@@ -186,7 +174,6 @@ public class PostScoreBasic {
         result.put("final_score", work.get("score"));
         result.put("offer", work.get("offer"));
         result.put("offer_name", work.get("offer_name"));
-        result.put("offer_details", work.get("offer_details"));
         result.put("modified_offer_score", work.get("modified_offer_score"));
         result.put("offer_value", work.get("offer_value"));
         return result;
@@ -273,5 +260,6 @@ public class PostScoreBasic {
         }
         return predictResult;
     }
+
 
 }

@@ -18,7 +18,7 @@ import java.io.IOException;
  * 21 July 2021 - New MAB implementation
  */
 public class PostScoreRecommender {
-	private static final Logger LOGGER = LogManager.getLogger(PostScorePattern.class.getName());
+	private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommender.class.getName());
 
 	static GlobalSettings settings;
 	static {
