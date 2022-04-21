@@ -210,6 +210,7 @@ public class PostScoreRecommenderMulti {
      * @return
      */
     public static JSONArray getSelectedPredictResultRandom(JSONObject predictResult, int numberOffers) {
+
         return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 1);
     }
 
@@ -220,6 +221,7 @@ public class PostScoreRecommenderMulti {
      * @return
      */
     public static JSONArray getSelectedPredictResult(JSONObject predictResult, int numberOffers) {
+
         return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 0);
     }
 
@@ -231,6 +233,7 @@ public class PostScoreRecommenderMulti {
         result.put("offer_name", work.get("offer_name"));
         result.put("modified_offer_score", work.get("modified_offer_score"));
         result.put("offer_value", work.get("offer_value"));
+
         return result;
     }
 
@@ -313,6 +316,7 @@ public class PostScoreRecommenderMulti {
             predictResult.put("final_result", getSelectedPredictResultRandom(predictResult, resultCount));
             predictResult.put("explore", 1);
         }
+
         return predictResult;
     }
 
