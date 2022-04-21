@@ -157,6 +157,7 @@ public class PostScoreBasic {
 
         double endTimePost = System.nanoTime();
         LOGGER.info("getPostPredict:I001: execution time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
+
         return predictModelMojoResult;
     }
 
@@ -167,6 +168,7 @@ public class PostScoreBasic {
      * @return
      */
     public static JSONArray getSelectedPredictResultRandom(JSONObject predictResult, int numberOffers) {
+
         return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 1);
     }
 
@@ -177,6 +179,7 @@ public class PostScoreBasic {
      * @return
      */
     public static JSONArray getSelectedPredictResult(JSONObject predictResult, int numberOffers) {
+
         return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 0);
     }
 
@@ -189,6 +192,7 @@ public class PostScoreBasic {
         result.put("offer_details", work.get("offer_details"));
         result.put("modified_offer_score", work.get("modified_offer_score"));
         result.put("offer_value", work.get("offer_value"));
+
         return result;
     }
 
@@ -271,6 +275,7 @@ public class PostScoreBasic {
             predictResult.put("final_result", getSelectedPredictResultRandom(predictResult, resultCount));
             predictResult.put("explore", 1);
         }
+
         return predictResult;
     }
 
