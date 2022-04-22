@@ -137,7 +137,7 @@
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver-legacy</artifactId>
-            <version>4.5.0</version>
+            <version>4.5.1</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.mongodb</groupId>
