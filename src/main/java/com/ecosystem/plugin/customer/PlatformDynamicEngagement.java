@@ -16,7 +16,7 @@ import java.io.IOException;
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
  * Use this class to score with dynamic sampling configurations. This class is configured to work with no model.
- * 20 Apr 2022 - Updated
+ * 20 April 2022 - Updated
  */
 public class PlatformDynamicEngagement {
 	private static final Logger LOGGER = LogManager.getLogger(PlatformDynamicEngagement.class.getName());
@@ -59,6 +59,10 @@ public class PlatformDynamicEngagement {
 			//JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
 			//JSONArray offerMatrix = params.getJSONArray("offerMatrix");
 			JSONObject work = params.getJSONObject("in_params");
+
+			/* Personality and base spend score */
+			// double probability = (double) domainsProbabilityObj.get("1");
+			//double probability = 1.0;
 
 			/***************************************************************************************************/
 			/** Standardized approach to access dynamic datasets in plugin.
@@ -191,15 +195,9 @@ public class PlatformDynamicEngagement {
 		LOGGER.info("PlatformDynamicEngagement:I001: time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
 
 		return predictModelMojoResult;
+
 	}
 
-	/**
-	 * When epsilon greedy is used
-	 * @param params
-	 * @param epsilonIn
-	 * @param name
-	 * @return
-	 */
 	private static JSONObject getExplore(JSONObject params, double epsilonIn, String name) {
 		double rand = MathRandomizer.getRandomDoubleBetweenRange(0, 1);
 		double epsilon = epsilonIn;
@@ -209,7 +207,6 @@ public class PlatformDynamicEngagement {
 		} else {
 			params.put(name, 0);
 		}
-
 		return params;
 	}
 
@@ -221,7 +218,6 @@ public class PlatformDynamicEngagement {
 	 * @return
 	 */
 	public static JSONArray getSelectedPredictResultRandom(JSONObject predictResult, int numberOffers) {
-
 		return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 1);
 	}
 
@@ -232,7 +228,6 @@ public class PlatformDynamicEngagement {
 	 * @return
 	 */
 	public static JSONArray getSelectedPredictResult(JSONObject predictResult, int numberOffers) {
-
 		return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 0);
 	}
 
@@ -246,7 +241,6 @@ public class PlatformDynamicEngagement {
 		result.put("offer_value", work.get("offer_value"));
 		result.put("contextual_variable_one", work.get("contextual_variable_one"));
 		result.put("contextual_variable_two", work.get("contextual_variable_two"));
-
 		return result;
 	}
 
@@ -317,7 +311,23 @@ public class PlatformDynamicEngagement {
 	 */
 	private static JSONObject getTopScores(JSONObject params, JSONObject predictResult) {
 
+		int resultCount = 1;
+		if (params.has("resultcount")) resultCount = params.getInt("resultcount");
+
+		if (predictResult.getJSONArray("final_result").length() <= resultCount)
+			resultCount = predictResult.getJSONArray("final_result").length();
+
+		/* depending on epsilon and mab settings */
+		if (params.getInt("explore") == 0) {
+			predictResult.put("final_result", getSelectedPredictResult(predictResult, resultCount));
+			predictResult.put("explore", 0);
+		} else {
+			predictResult.put("final_result", getSelectedPredictResultRandom(predictResult, resultCount));
+			predictResult.put("explore", 1);
+		}
+
 		return predictResult;
+
 	}
 
 
