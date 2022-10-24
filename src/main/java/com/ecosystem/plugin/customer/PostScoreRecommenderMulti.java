@@ -6,11 +6,11 @@ import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
 import com.ecosystem.worker.h2o.ModelPredictWorkerH2O;
 import hex.genmodel.easy.EasyPredictModelWrapper;
 import hex.genmodel.easy.RowData;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 

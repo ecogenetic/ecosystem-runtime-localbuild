@@ -6,8 +6,8 @@ import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
 import hex.genmodel.easy.EasyPredictModelWrapper;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -112,12 +112,22 @@ public class PostScoreBasic {
                     finalOffersObject.put("modified_offer_score", score);
                 } else if (type.equals("multinomial")) {
                     Object probability = predictModelMojoResult.getJSONArray("probability").get(0);
-                    Object label = predictModelMojoResult.getJSONArray("label").get(0);
+                    Object label = null;
+                    try {
+                        label = predictModelMojoResult.getJSONArray("label").get(0);
+                    } catch (Exception e) {
+                        LOGGER.error("PostScoreBasic:getPostPredict:E001: Error relates to scoring your model. The model wasn't loaded or is not accessible.");
+                        e.printStackTrace();
+                    }
                     Object response = predictModelMojoResult.getJSONArray("response").get(0);
                     finalOffersObject.put("score", probability);
                     finalOffersObject.put("modified_offer_score", probability);
                     finalOffersObject.put("offer", label);
                     finalOffersObject.put("offer_name", response);
+                } else if (type.equals("coxph")) {
+                    Object score = predictModelMojoResult.getJSONArray("value").get(0);
+                    finalOffersObject.put("score", score);
+                    finalOffersObject.put("modified_offer_score", score);
                 } else {
                     finalOffersObject.put("score", 1.0);
                     finalOffersObject.put("modified_offer_score", 1.0);
@@ -157,7 +167,6 @@ public class PostScoreBasic {
 
         double endTimePost = System.nanoTime();
         LOGGER.info("getPostPredict:I001: execution time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
-
         return predictModelMojoResult;
     }
 
@@ -168,7 +177,6 @@ public class PostScoreBasic {
      * @return
      */
     public static JSONArray getSelectedPredictResultRandom(JSONObject predictResult, int numberOffers) {
-
         return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 1);
     }
 
@@ -179,7 +187,6 @@ public class PostScoreBasic {
      * @return
      */
     public static JSONArray getSelectedPredictResult(JSONObject predictResult, int numberOffers) {
-
         return getSelectedPredictResultExploreExploit(predictResult, numberOffers, 0);
     }
 
@@ -192,7 +199,6 @@ public class PostScoreBasic {
         result.put("offer_details", work.get("offer_details"));
         result.put("modified_offer_score", work.get("modified_offer_score"));
         result.put("offer_value", work.get("offer_value"));
-
         return result;
     }
 
@@ -275,7 +281,6 @@ public class PostScoreBasic {
             predictResult.put("final_result", getSelectedPredictResultRandom(predictResult, resultCount));
             predictResult.put("explore", 1);
         }
-
         return predictResult;
     }
 

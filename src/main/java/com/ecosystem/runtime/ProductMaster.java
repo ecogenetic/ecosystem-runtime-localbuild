@@ -4,12 +4,10 @@
 
 package com.ecosystem.runtime;
 
-import com.ecosystem.EcosystemBatch;
 import com.ecosystem.EcosystemMaster;
 import com.ecosystem.EcosystemResponse;
 import com.ecosystem.data.mongodb.ConnectionFactory;
 import com.ecosystem.runtime.authentication.KeyManagement;
-import com.ecosystem.worker.kafka.BasicProducerKerberos;
 import com.ecosystem.utils.ActivityLog;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONDecode;
@@ -17,6 +15,7 @@ import com.ecosystem.worker.h2o.ModelMojoWorkerH2O;
 import com.ecosystem.worker.h2o.RunModelMojo;
 import com.mongodb.client.MongoCollection;
 import hex.genmodel.easy.EasyPredictModelWrapper;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -25,8 +24,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
@@ -34,12 +34,13 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.security.RolesAllowed;
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.text.ParseException;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.ecosystem.EcosystemMaster.generateUUID;
 import static com.ecosystem.data.mongodb.MongoDBWorkerLogging.addLoggingAsync;
+import static com.ecosystem.utils.GenerateUUID.generateUUID;
 import static org.springframework.web.bind.annotation.RequestMethod.GET;
 import static org.springframework.web.bind.annotation.RequestMethod.PUT;
 
@@ -65,7 +66,7 @@ import static org.springframework.web.bind.annotation.RequestMethod.PUT;
         "\nUse this approach for inputs from data source:\n" +
         "{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':true, lookup:{key:'customer',value:1234567890}} " +
         "\nIf there is post-scoring logic, then ise this configuration:\n" +
-        "{'name':'predict1', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'customer',value:1234567890}, param:{key:'value_field', value:30}}\n")
+        "{'name':'predict1', 'mojo': '1','mab': {'class':'mabone', 'epsilon':0.4},'dbparam': true, lookup:{key:'customer',value: 1234567890}, param: {key:'value_field', value:30}}\n")
 
 public class ProductMaster {
 
@@ -79,19 +80,29 @@ public class ProductMaster {
     public EcosystemMaster ecosystemMaster;
     public EcosystemResponse ecosystemResponse;
 
-    public ProductMaster() throws Exception {
+    public ProductMaster() {
         keyManagement = new KeyManagement();
-        settings = new GlobalSettings();
+        try {
+            settings = new GlobalSettings();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         settingsConnection = new ConnectionFactory();
-        ecosystemMaster = new EcosystemMaster(settingsConnection, settings);
-        ecosystemResponse = new EcosystemResponse(settingsConnection, settings, ecosystemMaster.basicProducerKerberos);
+        try {
+            ecosystemMaster = new EcosystemMaster(settingsConnection, settings);
+            ecosystemResponse = new EcosystemResponse(settingsConnection, settings, ecosystemMaster.basicProducerKerberos);
+        } catch (Exception e) {
+            LOGGER.error("ProductMaster:ProductMaster:E001: ecosystemMaster cannot be instantiated. Push correct properties and refresh.");
+            e.printStackTrace();
+        }
     }
+
 
     /**
      * @return Result
      */
     @RequestMapping(value = "/generateKey", method = GET)
-    public String generateKey(@RequestHeader Map<String, String> headers) throws Exception {
+    public String generateKey(@RequestHeader Map<String, String> headers) {
         LOGGER.info("/refresh API");
         String returnVal;
         if (ACCESS_KEY.isEmpty()) {
@@ -160,47 +171,13 @@ public class ProductMaster {
         LOGGER.info("refresh:Models: " + this.settings.getMojo());
         LOGGER.info("refresh:Epsilon: " + this.settings.getEpsilon());
         try {
-            return "{\"message\":\"Success\"}";
+            return "{\"message\": \"Success\"}";
         } catch (NullPointerException e) {
             JSONObject error = new JSONObject();
             error.put("ErrorMessage", "Refresh failed, please check database or other connections, models, etc: " + e.getMessage());
             LOGGER.info("refresh: Reload Failed");
             return error.toString();
         }
-    }
-
-    /**************************************************************************************************************/
-
-    /**
-     * Score values in batch abd write back...
-     * Process and score individual records. Param string example:
-     * {"pulse_responder_list":[],"execution_type": "internal", "database": "behavior", "collection":"budget_messages_segment", "threads": 2, "find": "{}", "database_out":"behavior", "collection_out": "budget_messages_out", "campaign":"dynamic_engagement", "number_of_offers": 1, "userid": "batch","options": "", contextual_variables: {"contextual_variable_one_name":"personality", "contextual_variable_two_name":""}}*
-     * OR when external runtimes are used:
-     * {"pulse_responder_list":[{"server":"http://localhost:8092"},{"server":"http://localhost:8093"},{"server":"http://localhost:8094"}], "execution_type": "internal", "database": "behavior", "collection": "ucn_baseid_anon", "threads": 7, "find": "{}", "database_out": "behavior", "collection_out": "ucn_baseid_anon_scored", "campaign": "dynamic_engagement", "number_of_offers": 10, "userid": "batch", "options": "", contextual_variables: {"contextual_variable_one_name":"personality", "contextual_variable_two_name":""}}
-     *
-     ** @return Result
-     */
-    @Operation(description = "Process and score individual records. Param string example:\n" +
-            "{\"pulse_responder_list\":[],\"execution_type\": \"internal\", \"database\": \"behavior\", \"collection\":\"budget_messages_segment\", \"threads\": 2, \"find\": \"{}\", \"database_out\":\"behavior\", \"collection_out\": \"budget_messages_out\", \"campaign\":\"dynamic_engagement\", \"number_of_offers\": 1, \"userid\": \"batch\",\"options\": \"\", contextual_variables: {\"contextual_variable_one_name\":\"personality\", \"contextual_variable_two_name\":\"\"}}*\n" +
-            "OR when external runtimes are used:\n" +
-            "{\"pulse_responder_list\":[{\"server\":\"http://localhost:8092\"},{\"server\":\"http://localhost:8093\"},{\"server\":\"http://localhost:8094\"}], \"execution_type\": \"internal\", \"database\": \"behavior\", \"collection\": \"ucn_baseid_anon\", \"threads\": 7, \"find\": \"{}\", \"database_out\": \"behavior\", \"collection_out\": \"ucn_baseid_anon_scored\", \"campaign\": \"dynamic_engagement\", \"number_of_offers\": 10, \"userid\": \"batch\", \"options\": \"\", contextual_variables: {\"contextual_variable_one_name\":\"personality\", \"contextual_variable_two_name\":\"\"}}" +
-            "", summary = "Process and score individual records in batch mode.")
-
-    @RequestMapping(value = "/processBatch", method = RequestMethod.POST)
-    public String processBatch(@RequestHeader Map<String, String> headers,
-                               @RequestBody String request) throws Exception {
-        LOGGER.info("/processBatch ");
-        JSONObject result;
-        try {
-            JSONObject paramsObj = new JSONObject(request);
-            EcosystemBatch ecosystemBatch = new EcosystemBatch(settings, settingsConnection, ecosystemMaster, ecosystemResponse);
-            result = ecosystemBatch.processBatch(paramsObj);
-        } catch (Exception e) {
-            e.printStackTrace();
-            LOGGER.error("PredictorMaster:processBatch:E000: Param error: " + e);
-            return ("{\"ErrorMessage\":\"Error: " + e + "\"}");
-        }
-        return result.toString();
     }
 
     /**************************************************************************************************************/
@@ -219,7 +196,8 @@ public class ProductMaster {
         JSONObject predictResult = new JSONObject();
         try {
             JSONObject inpObj = new JSONObject(request);
-            String params = inpObj.getString("params");
+
+            String params = (String) inpObj.get("params");
             String campaign = inpObj.getString("campaign");
             String subcampaign = inpObj.getString("subcampaign");
             String channel = inpObj.getString("channel");
@@ -229,7 +207,9 @@ public class ProductMaster {
 
             JSONObject paramsParams = new JSONObject();
             try {
-                paramsParams = new JSONObject(JSONDecode.decode(params));
+                String in_params = URLDecoder.decode(params);
+                if (in_params.startsWith("\"")) in_params = in_params.substring(1, in_params.length() - 1).replaceAll("\\\\", "");
+                paramsParams = new JSONObject(in_params);
             } catch (org.json.JSONException e) {
                 LOGGER.info("/offerRecommendations malformed params JSON input: " + params);
                 return paramsParams.put("ErrorMessage", e).toString().intern();
@@ -240,6 +220,9 @@ public class ProductMaster {
             String uuid = generateUUID();
             // param.put("headers", headers);
             param.put("uuid", uuid);
+
+            LOGGER.info("/invocations:UUID: " + uuid + " predictor: " + campaign);
+
             param.put("name", campaign);
             param.put("customer", customer);
             param.put("subcampaign", subcampaign);
@@ -250,11 +233,20 @@ public class ProductMaster {
             /* this is needed to not cause a stack overflow as adding current value of json object */
             JSONObject inParam = new JSONObject(param.toString());
             param.put("api_params", inParam);
-            param = ValidateParams.getLookupFromParams(settings, param, customer);
 
-            /* Set defaults for model and paramneters from database */
+            /** Set defaults for model and paramneters from database */
+            param.put("in_params", paramsParams);
+            if (paramsParams.has("input")) {
+                param.put("input", paramsParams.getJSONArray("input"));
+                param.put("value", paramsParams.getJSONArray("value"));
+                param.put("lookup", new JSONObject().put("value", customer).put("key", "customer"));
+                param.put("dbparam", false);
+            } else {
+                param.put("dbparam", true);
+                param = ValidateParams.getLookupFromParams(settings, param, customer);
+            }
+
             param.put("mojo", "1");
-            param.put("dbparam", true);
 
             /* Obtain default epsilon from properties or obtain from input params */
             if (!paramsParams.has("mab")) {
@@ -265,7 +257,6 @@ public class ProductMaster {
             } else {
                 param.put("mab", paramsParams.getJSONObject("mab"));
             }
-            param.put("in_params", paramsParams);
 
             /* Primary prediction from EcosystemMaster.getPredictionResult */
             predictResult = ecosystemMaster.getPredictionResult(param);
@@ -315,7 +306,9 @@ public class ProductMaster {
 
         JSONObject paramsParams = new JSONObject();
         try {
-            paramsParams = new JSONObject(JSONDecode.decode(jsonParams));
+            String in_params = URLDecoder.decode(jsonParams);
+            if (in_params.startsWith("\"")) in_params = in_params.substring(1, in_params.length() - 1).replaceAll("\\\\", "");
+            paramsParams = new JSONObject(in_params);
         } catch (org.json.JSONException e) {
             LOGGER.info("/offerRecommendations malformed params JSON input: " + jsonParams);
             return paramsParams.put("ErrorMessage", e).toString();
@@ -326,6 +319,9 @@ public class ProductMaster {
         String uuid = generateUUID();
         param.put("headers", headers);
         param.put("uuid", uuid);
+
+        LOGGER.info("/invocations:UUID: " + uuid + " predictor: " + campaign);
+
         param.put("customer", customer);
         param.put("name", campaign);
         param.put("subcampaign", subcampaign);
@@ -380,13 +376,14 @@ public class ProductMaster {
      * @return Result
      */
     @Operation(description = "Update response based on recommendation accepted:" +
-            "{\"uuid\":\"dcb54a23-0737-4768-845d-48162598c0f7\",\"offers_accepted\":[{\"offer_name\":\"GSM_999_A\"}],\"channel_name\":\"USSD\",\"transaction_id\":\"uuid:0aa9140a-755e-48de-84a2-0a67451804f7\"}" +
+            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"GSM_999_A\"}], \"channel_name\": \"USSD\"}" +
             "", summary = "Generic prediction scoring endine for recommenders.")
     @RequestMapping(value = "/offerRecommendations", method = PUT)
     @ResponseStatus(HttpStatus.OK)
     public String putOfferRecommendations(@RequestHeader Map<String, String> headers,
                                           @RequestParam(name = "document", defaultValue = "") String documentJSON) throws IOException, ParseException {
         LOGGER.info("/offerRecommendations PUT API");
+        LOGGER.info(documentJSON);
 
         String response;
         try {
@@ -404,11 +401,12 @@ public class ProductMaster {
             JSONObject error = new JSONObject().put("ErrorMessage", "Validate that uuid is available in log. " + e.getMessage());
             response = error.toString();
         }
-        return "{\"message\":\"" + response + "\"}";
+        return "{\"message\": \"" + response + "\"}";
     }
 
 
     /**************************************************************************************************************/
+
 
     /**
      * CORE RUNTIME FEATURES FROM GENERATION 2
@@ -442,7 +440,7 @@ public class ProductMaster {
      * @throws IOException Error
      */
     @Operation(description = "Perform basic prediction on model with detail: none, basic or all. Example parameter: " +
-            "{'mojo':'model_mojo.zip','input': ['x','y'],'value': ['val_x', 'val_y']}",
+            "{'mojo': 'model_mojo.zip', 'input': ['x','y'], 'value': ['val_x', 'val_y']}",
             summary = "Basic scoring endine.")
     @RequestMapping(value = "/runModelMojo", method = RequestMethod.GET)
     public String runModelMojo(
@@ -472,7 +470,7 @@ public class ProductMaster {
 
             return String.valueOf(predictResult);
         } else {
-            return "{\"ErrorMessage\":\"PredictorMaster:runModelMojo:E001: No 'input' parameter, or no data for input.\"}";
+            return "{\"ErrorMessage\": \"PredictorMaster:runModelMojo:E001: No 'input' parameter, or no data for input.\"}";
         }
     }
 
@@ -492,8 +490,8 @@ public class ProductMaster {
     public String predictorResponsePreLoadKafKa(
             @RequestHeader Map<String, String> headers,
             @RequestParam(name = "value",
-                    defaultValue = "{'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'},'mojo':'1', 'input':['x','y'], 'value':['val_x','val_y']} " +
-                            "OR {'name':'predict1', 'kafka':{'TOPIC_NAME':'ecosystem1','log':'true'}, 'mojo':'1', 'dbparam':true, lookup:{key:'customer',value:'1234567890'} }") String valueJSON,
+                    defaultValue = "{'name': 'predict1', 'kafka': {'TOPIC_NAME': 'ecosystem1', 'log': 'true'},'mojo': '1', 'input': ['x', 'y'], 'value': ['val_x', 'val_y']} " +
+                            "OR {'name': 'predict1', 'kafka': {'TOPIC_NAME': 'ecosystem1','log': 'true'}, 'mojo': '1', 'dbparam': true, lookup: {key: 'customer', value: '1234567890'} }") String valueJSON,
             @RequestParam(name = "detail",
                     defaultValue = "none") String detail) {
         LOGGER.info("/predictorResponsePreLoadKafKa params: " + valueJSON);
@@ -502,7 +500,7 @@ public class ProductMaster {
             return ecosystemMaster.getPredictionResultToKafka(params);
         } catch (Exception e) {
             LOGGER.error("PredictorMaster:predictorResponsePreLoadKafKa:E000: Param error: " + e);
-            return "{\"ErrorMessage\":\"PredictorMaster:predictorResponsePreLoadKafKa:E000-1: Parameter error.\"}";
+            return "{\"ErrorMessage\": \"PredictorMaster:predictorResponsePreLoadKafKa:E000-1: Parameter error.\"}";
         }
 
     }
@@ -521,20 +519,20 @@ public class ProductMaster {
             "The predictor parameters are broken into two types namely, requiring all parameters via API or requiring a lookup key via API and extracting parameters " +
             "from a data source." +
             "Use this format for input prams only:" +
-            "{'name':'predict1', 'mojo':1,'dbparam':false,'input': ['x','y'],'value': ['val_x', 'val_y'], lookup:{'key':'', 'value':''}}" +
+            "{'name': 'predict1', 'mojo': 1, 'dbparam': false, 'input': ['x','y'], 'value': ['val_x', 'val_y'], lookup: {'key': '', 'value': ''}}" +
             "Use this approach for inputs from data source:" +
-            "{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':true, lookup:{key:'customer',value:1234567890}} " +
+            "{'name': 'predict1', 'mojo': 'model_mojo.zip', 'dbparam': true, lookup: {key: 'customer', value: 1234567890}} " +
             "If there is post-scoring logic, then ise this configuration:" +
-            "{'name':'predict1', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'customer',value:1234567890}, param:{key:'value_field', value:30}}" +
+            "{'name': 'predict1', 'mojo': '1', 'mab': {'class': 'mabone', 'epsilon': 0.4},'dbparam': true, lookup: {key: 'customer', value: 1234567890}, param: {key: 'value_field', value: 30}}" +
             "", summary = "Perform prediction on pre-loaded model with detail.")
     @RequestMapping(value = "/predictorResponsePreLoad", method = RequestMethod.GET)
     @ResponseStatus(HttpStatus.OK)
     public String predictorResponsePreLoad(
             @RequestHeader Map<String, String> headers,
             @RequestParam(name = "value",
-                    defaultValue = "{'name':'predict1', 'mojo':'1..16','dbparam':false, 'input':['x','y'], 'value':['val_x','val_y'], 'x':1} " +
-                            "OR {'name':'predict1', 'mojo':'1','dbparam':true, lookup:{key:'customer',value:'1234567890'}} + " +
-                            "OR {'name':'predict1', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'customer',value:1234567890}, param:{key:'value_field', value:30}, resultcount:3}") String valueJSON,
+                    defaultValue = "{'name': 'predict1', 'mojo': '1..16', 'dbparam': false, 'input': ['x','y'], 'value': ['val_x', 'val_y'], 'x': 1} " +
+                            "OR {'name': 'predict1', 'mojo': '1','dbparam': true, lookup: {key: 'customer',value: '1234567890'}} + " +
+                            "OR {'name': 'predict1', 'mojo': '1','mab': {'class': 'mabone', 'epsilon': 0.4},'dbparam': true, lookup: {key: 'customer',value: 1234567890}, param: {key: 'value_field', value: 30}, resultcount: 3}") String valueJSON,
             @RequestParam(name = "detail",
                     defaultValue = "all") String detail) throws Exception {
         LOGGER.info("/predictorResponsePreLoad params: " + valueJSON);
@@ -550,21 +548,164 @@ public class ProductMaster {
      * @param documentJSON documentJSON
      * @return Result
      */
-    @Operation(description = "Update response based on predictions accepted:" +
-            "{\"uuid\":\"dcb54a23-0737-4768-845d-48162598c0f7\",\"offers_accepted\":[{\"offer_name\":\"GSM_999_A\"}],\"channel_name\":\"USSD\",\"transaction_id\":\"uuid:0aa9140a-755e-48de-84a2-0a67451804f7\"}" +
+    @Operation(description = "Update response based on predictions accepted: " +
+            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"GSM_999_A\"}], \"channel_name\": \"USSD\"}" +
             "", summary = "Update response based on predictions accepted")
+    @RequestMapping(value = "/response", method = RequestMethod.POST)
+    public String processResponse(@RequestHeader Map<String, String> headers,
+                                  @RequestBody String documentJSON) throws Exception {
+        LOGGER.info("/response POST API");
+        String response = "Error";
 
-    @RequestMapping(value = "/response", method = PUT)
-    public String response(@RequestHeader Map<String, String> headers,
-                           @RequestParam(name = "document", defaultValue = "") String documentJSON) throws IOException, ParseException {
-        LOGGER.info("/response PUT API");
+        try {
+            JSONObject responseObj = ecosystemResponse.putResponseReturnDetail(JSONDecode.decode(documentJSON));
+            if (responseObj.has("uuid"))
+                response = responseObj.getString("uuid");
+            else
+                response = "Error: UUID not found.";
+        } catch (Exception e) {
+            e.printStackTrace();
+            JSONObject error = new JSONObject().put("ErrorMessage", "Validate that uuid is available in log. " + e.getMessage());
+            response = error.toString();
+        }
 
-        JSONObject responseObj = ecosystemResponse.putResponseReturnDetail(JSONDecode.decode(documentJSON));
-        String response = responseObj.getString("uuid");
-
-        return "{\"message\":\"" + response + "\"}";
+        return "{\"message\": \"" + response + "\"}";
     }
 
     /**************************************************************************************************************/
+
+
+    /**
+     * Prediction case is determined from properties file setup: mojo's, feature store, and other settings.
+     * <p>
+     * Balance enquire Case:
+     * From paramsParams - balance enquiry example: {msisdn:0828811817,in_balance:50,voice_balance:12,data_balance:400,n_offers:1}
+     * <p>
+     * Recharge Recommender Case:
+     * {'name':'layalty_recommender', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'msisdn',value:849999330}, param:{key:'in_recharge', value:100}, resultcount:2}
+     *
+     * @param campaign     campaign
+     * @param subcampaign  subcampaign
+     * @param customer     customer
+     * @param channel      channel
+     * @param numberoffers numberoffers
+     * @return Result
+     */
+    @Operation(summary = "Provide offers that form part of a campaign for a particular customer.")
+    @RequestMapping(value = "/justforyou", method = GET)
+    @ResponseStatus(HttpStatus.OK)
+    public String justforyou(  @RequestHeader Map<String, String> headers,
+                               @RequestParam(value = "msisdn") String customer,
+                               @RequestParam(value = "payment_method") String paymentMethod,
+                               @RequestParam(value = "campaign_id") String campaign,
+                               @RequestParam(value = "sub_campaign_id", required = false) String subcampaign,
+                               @RequestParam(value = "channel_name") String channel,
+                               @RequestParam(value = "number_of_offers", required = false) int numberoffers,
+                               @RequestParam(value = "user_id") String userid,
+                               @RequestParam(value = "params", required = false) String jsonParams) throws Exception {
+        LOGGER.info("/justforyou API");
+
+        JSONObject paramsParams = new JSONObject();
+
+        try {
+            String in_params = URLDecoder.decode(jsonParams);
+            if (in_params.startsWith("\"")) in_params = in_params.substring(1, in_params.length() - 1).replaceAll("\\\\", "");
+            paramsParams = new JSONObject(in_params);
+        } catch (org.json.JSONException e) {
+            LOGGER.info("/justforyou malformed params JSON input: " + jsonParams);
+            return paramsParams.put("ErrorMessage", e).toString();
+        }
+
+        JSONObject param = new JSONObject();
+        String uuid = generateUUID();
+        param.put("headers", headers);
+        param.put("uuid", uuid);
+
+        LOGGER.info("/justforyou:UUID: " + uuid + " predictor: " + campaign);
+
+        param.put("name", campaign);
+        param.put("customer", customer);
+        param.put("campaign_id", campaign);
+        param.put("subcampaign", subcampaign);
+        param.put("channel", channel);
+        param.put("subname", subcampaign);
+        param.put("resultcount", numberoffers);
+        param.put("userid", userid);
+        param.put("api_payment_method", paymentMethod);
+        /* use api_params key to store values in the params json object to allow for logging */
+        JSONObject inParam = new JSONObject(param.toString());
+        param.put("api_params", inParam);
+
+        /** Set defaults for model and paramneters from database */
+        param.put("in_params", paramsParams);
+        if (paramsParams.has("input")) {
+            param.put("input", paramsParams.getJSONArray("input"));
+            param.put("value", paramsParams.getJSONArray("value"));
+            param.put("lookup", new JSONObject().put("value", customer).put("key", "customer"));
+            param.put("dbparam", false);
+        } else {
+            param.put("dbparam", true);
+            param = ValidateParams.getLookupFromParams(settings, param, customer);
+        }
+
+        param.put("mojo", "1");
+
+        /** Obtain default epsilon from properties or obtain from input params */
+        if (!paramsParams.has("mab")) {
+            JSONObject mabParam = new JSONObject();
+            mabParam.put("class", "mabone");
+            mabParam.put("epsilon", settings.getEpsilon());
+            param.put("mab", mabParam);
+        } else {
+            param.put("mab", paramsParams.getJSONObject("mab"));
+        }
+
+        /** Primary prediction from EcosystemMaster.getPredictionResult */
+        JSONObject predictResult = new JSONObject();
+        predictResult = ecosystemMaster.getPredictionResult(param);
+        if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
+        if (predictResult.has("ErrorMessage")) {
+            predictResult.put("error", 1);
+        }
+
+        /* TODO MAKE THIS CONFIGURABLE IN THE WORKBENCH */
+        /* stage specific JSON result */
+        JSONObject result = new JSONObject();
+        result.put("cache", predictResult.get("cache"));
+        result.put("request_date", predictResult.get("datetime"));
+        result.put("explore",predictResult.get("explore"));
+        result.put("msisdn", customer);
+        result.put("campaign_id", campaign);
+        result.put("session_id", param.get("uuid"));
+        result.put("uuid", param.get("uuid"));
+        result.put("in_params", param.get("in_params"));
+        result.put("final_result", predictResult.getJSONArray("final_result"));
+        if (param.has("payment_method_code"))
+            result.put("payment_method",param.get("payment_method_code"));
+        else
+            result.put("payment_method",paymentMethod);
+
+        return result.toString().intern();
+    }
+
+    /**
+     * Confirm offers taken up by customers/msisdn.
+     *
+     * @param documentJSON documentJSON
+     * @return Result
+     */
+    @Operation(summary = "Update offers taken up by customers. Supported response format: " +
+            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_treatment_code\": \"GSM_999_A\"}], \"channel_name\": \"USSD\", \"transaction_id\": \"uuid:0aa9140a-755e-48de-84a2-0a67451804f7\"}")
+    @RequestMapping(value = "/justforyou", method = PUT)
+    public String justforyou(@RequestHeader Map<String, String> headers,
+                             @RequestParam(name = "document") String documentJSON) throws IOException, ParseException {
+        LOGGER.info("/justforyou PUT API");
+        String response = ecosystemResponse.putResponse(JSONDecode.decode(documentJSON));
+        if (response == null)
+            LOGGER.error("/justforyou PUT API input document: " + documentJSON);
+        else
+            LOGGER.info("/justforyou PUT API response: " + response);
+        return response;
+    }
 
 }
