@@ -6,8 +6,8 @@ import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
 import hex.genmodel.easy.EasyPredictModelWrapper;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -16,7 +16,7 @@ import java.io.IOException;
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
  * Use this class to score with dynamic sampling configurations. This class is configured to work with no model.
- * 20 April 2022 - Updated
+ * 14 Sept 2022 - Updated
  */
 public class PlatformDynamicEngagement {
 	private static final Logger LOGGER = LogManager.getLogger(PlatformDynamicEngagement.class.getName());
@@ -104,10 +104,10 @@ public class PlatformDynamicEngagement {
 			for (int j = 0; j < options.length(); j++) {
 				JSONObject option = options.getJSONObject(j);
 				String contextual_variable_one_Option = "";
-				if (option.has("contextual_variable_one"))
+				if (option.has("contextual_variable_one") && !contextual_variable_one.equals(""))
 					contextual_variable_one_Option = String.valueOf(option.get("contextual_variable_one"));
 				String contextual_variable_two_Option = "";
-				if (option.has("contextual_variable_two"))
+				if (option.has("contextual_variable_two") && !contextual_variable_two.equals(""))
 					contextual_variable_two_Option = String.valueOf(option.get("contextual_variable_two"));
 
 				if (contextual_variable_one_Option.equals(contextual_variable_one) && contextual_variable_two_Option.equals(contextual_variable_two)) {
@@ -122,19 +122,28 @@ public class PlatformDynamicEngagement {
 					double p = 0.0;
 					double arm_reward = 0.001;
 					if (randomisation.getString("approach").equals("epsilonGreedy")) {
-						params = getExplore(params, randomisation.getDouble("epsilon"), "explore");
-						explore = params.getInt("explore");
-						p = option.getDouble("weighting");
-						if (explore == 0)
-							arm_reward = MathRandomizer.getRandomIntBetweenRange(0, 1);
-						else
-							arm_reward = 1.0;
+//						params = getExplore(params, randomisation.getDouble("epsilon"), "explore");
+//						explore = params.getInt("explore");
+//						p = option.getDouble("weighting");
+//						if (explore == 1)
+//							arm_reward = MathRandomizer.getRandomIntBetweenRange(0, 1);
+//						else
+//							arm_reward = 1.0;
+
+						params.put("explore", 0);
+						explore = 0;
+						p = DataTypeConversions.getDouble(option, "arm_reward");
+						arm_reward = p;
+
 					} else {
+
 						/** REMEMBER THAT THIS IS HERE BECAUSE OF BATCH PROCESS, OTHERWISE IT REQUIRES THE TOTAL COUNTS */
 						/* Phase 2: sampling - calculate the arms and rank them */
-						params.put("explore", 1); // force explore to zero and use Thompson Sampling only!!
-						explore = 1; // set as explore as the dynamic responder is exploration based...
+						params.put("explore", 0); // force explore to zero and use Thompson Sampling only!!
+						explore = 0; // set as explore as the dynamic responder is exploration based...
 						p = DataTypeConversions.getDouble(option, "arm_reward");
+						arm_reward = p;
+
 					}
 					/***************************************************************************************************/
 
@@ -157,6 +166,7 @@ public class PlatformDynamicEngagement {
 					finalOffersObject.put("beta", beta);
 					finalOffersObject.put("weighting", (double) DataTypeConversions.getDoubleFromIntLong(option.get("weighting")));
 					finalOffersObject.put("explore", explore);
+					finalOffersObject.put("uuid", params.get("uuid"));
 
 					finalOffersObject.put("arm_reward", arm_reward);
 
@@ -181,7 +191,7 @@ public class PlatformDynamicEngagement {
 				}
 			}
 
-			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "score", "double", "d");
+			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
 			predictModelMojoResult.put("final_result", sortJsonArray);
 
 		} catch (Exception e) {
@@ -234,13 +244,18 @@ public class PlatformDynamicEngagement {
 	private static JSONObject setValues(JSONObject work) {
 		JSONObject result = new JSONObject();
 		result.put("score", work.get("score"));
+		result.put("arm_reward", work.get("arm_reward"));
 		result.put("final_score", work.get("score"));
 		result.put("offer", work.get("offer"));
 		result.put("offer_name", work.get("offer_name"));
 		result.put("modified_offer_score", work.get("modified_offer_score"));
 		result.put("offer_value", work.get("offer_value"));
+		result.put("uuid", work.get("uuid"));
+
+		/** Important to use for logging and history lookup in Dynamic Configurations */
 		result.put("contextual_variable_one", work.get("contextual_variable_one"));
 		result.put("contextual_variable_two", work.get("contextual_variable_two"));
+
 		return result;
 	}
 
@@ -329,6 +344,5 @@ public class PlatformDynamicEngagement {
 		return predictResult;
 
 	}
-
 
 }
