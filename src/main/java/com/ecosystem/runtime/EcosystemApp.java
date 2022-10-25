@@ -11,8 +11,6 @@ import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.springdoc.core.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
@@ -34,12 +32,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
-import java.util.Locale;
-
 @OpenAPIDefinition(
 		servers = {
 				@Server(url = "/", description = "Default Server URL")
@@ -60,7 +52,6 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	public static String version;
 
 	RollingMaster rollingMaster = new RollingMaster();
-	private String uuid = null;
 	private long count = 0;
 	GlobalSettings settings;
 	{
@@ -117,21 +108,6 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 		System.out.println("Loaded...");
     }
 
-	private void checkCorpora() {
-		JSONArray corpora = settings.getCorpora();
-		if (corpora != null) {
-			for (int j = 0; j < corpora.length(); j++) {
-				JSONObject corporaOne = (JSONObject) corpora.get(j);
-				if (corporaOne.getString("type").equals("dynamic_engagement_options")) {
-
-				}
-				if (corporaOne.getString("type").equals("dynamic_engagement")) {
-					uuid = corporaOne.getString("uuid");
-				}
-			}
-		}
-	}
-
 	/**
 	 * Continuous scheduling engine.
 	 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
@@ -141,19 +117,13 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 10000)
 	public void scheduleFixedRateTaskAsync() {
 
-		DateTimeFormatter formatter = DateTimeFormatter
-				.ofLocalizedDateTime( FormatStyle.LONG )
-				.withLocale( Locale.ENGLISH )
-				.withZone( ZoneId.systemDefault());
-		Instant instant = Instant.now();
-		String instantStr = formatter.format( instant );
 		count = count + 1;
 
 		System.out.println("==================================================================================================");
-		System.out.println("===>>> Execute Monitoring Engine (" + count + "): " + instantStr);
+		System.out.println("===>>> Execute Monitoring Engine (" + count + "): " + RollingMaster.nowDate());
 		System.out.println("====================================================================================================");
 
-		this.checkCorpora();
+		String uuid = RollingMaster.checkCorpora(settings);
 
 		if (uuid != null)
 			rollingMaster.process();
