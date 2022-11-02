@@ -58,7 +58,9 @@ public class PostScoreBasic {
         try {
             /* Setup JSON objects for specific prediction case */
             JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
-            JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
+            JSONObject domainsProbabilityObj = new JSONObject();
+            if (predictModelMojoResult.has("domainsProbabilityObj"))
+                domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
 
             /* If whitelist settings then only allow offers on list */
             boolean whitelist = false;
@@ -84,7 +86,14 @@ public class PostScoreBasic {
 
                 /** Model type based approaches */
                 String type = "";
-                type = predictModelMojoResult.getJSONArray("type").getString(0);
+                boolean explainability = false;
+                if (predictModelMojoResult.get("type").getClass().getName().toLowerCase().contains("array")) {
+                    type = predictModelMojoResult.getJSONArray("type").get(0).toString().toLowerCase();
+                    if (predictModelMojoResult.has("shapley_contributions"))
+                        explainability = true;
+                } else {
+                    type = ((String) predictModelMojoResult.get("type")).toLowerCase();
+                }
 
                 /** Offer name, defaults to type (replace with offer matrix etc) */
                 if (featuresObj.has("offer_name_final"))
@@ -98,19 +107,19 @@ public class PostScoreBasic {
                     finalOffersObject.put("offer", type);
 
                 /** Score based on model type */
-                if (type.equals("Clustering")) {
+                if (type.contains("clustering")) {
                     finalOffersObject.put("cluster", predictModelMojoResult.getJSONArray("cluster").get(0));
                     finalOffersObject.put("score", DataTypeConversions.getDouble(domainsProbabilityObj, "score"));
                     finalOffersObject.put("modified_offer_score", DataTypeConversions.getDouble(domainsProbabilityObj, "score"));
-                } else if (type.equals("AnomalyDetection")) {
+                } else if (type.contains("anomalydetection")) {
                     double[] score = (double[]) domainsProbabilityObj.get("score");
                     finalOffersObject.put("score", score[0]);
                     finalOffersObject.put("modified_offer_score", score[0]);
-                } else if (type.equals("regression")) {
+                } else if (type.contains("regression")) {
                     Object score = predictModelMojoResult.getJSONArray("value").get(0);
                     finalOffersObject.put("score", score);
                     finalOffersObject.put("modified_offer_score", score);
-                } else if (type.equals("multinomial")) {
+                } else if (type.contains("multinomial")) {
                     Object probability = predictModelMojoResult.getJSONArray("probability").get(0);
                     Object label = null;
                     try {
@@ -124,7 +133,7 @@ public class PostScoreBasic {
                     finalOffersObject.put("modified_offer_score", probability);
                     finalOffersObject.put("offer", label);
                     finalOffersObject.put("offer_name", response);
-                } else if (type.equals("coxph")) {
+                } else if (type.contains("coxph")) {
                     Object score = predictModelMojoResult.getJSONArray("value").get(0);
                     finalOffersObject.put("score", score);
                     finalOffersObject.put("modified_offer_score", score);
@@ -134,6 +143,10 @@ public class PostScoreBasic {
                 }
 
                 finalOffersObject.put("offer_details", domainsProbabilityObj);
+                if (explainability) {
+                    finalOffersObject.put("shapley_contributions", predictModelMojoResult.get("shapley_contributions"));
+                    finalOffersObject.put("shapley_contributions_names", predictModelMojoResult.get("shapley_contributions_names"));
+                }
 
                 /** Default value, could be replaced by offer matrix or feature store */
                 double offer_value = 1.0;
