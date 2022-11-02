@@ -192,6 +192,9 @@ public class ProductMaster {
     @RequestMapping(value = "/invocations", method = RequestMethod.POST)
     public String invoke(@RequestHeader Map<String, String> headers,
                          @RequestBody String request) throws Exception {
+//		public String invoke(@RequestHeader Map<String, String> headers,
+//							 HttpServletRequest request) throws Exception {
+        // return this.predictor.predict(request.getReader(), this.model);
         LOGGER.info("/invocations API");
         JSONObject predictResult = new JSONObject();
         try {
@@ -704,7 +707,7 @@ public class ProductMaster {
         if (response == null)
             LOGGER.error("/justforyou PUT API input document: " + documentJSON);
         else
-            LOGGER.info("/justforyou PUT API response: " + response);
+            LOGGER.debug("/justforyou PUT API response: " + response);
         return response;
     }
 

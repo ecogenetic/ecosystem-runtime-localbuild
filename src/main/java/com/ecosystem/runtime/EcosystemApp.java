@@ -26,6 +26,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -108,25 +109,110 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 		System.out.println("Loaded...");
     }
 
-	/**
-	 * Continuous scheduling engine.
-	 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
-	 */
-	@Async
-	@Qualifier(value = "taskExecutor")
-	@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 10000)
-	public void scheduleFixedRateTaskAsync() {
+	/*****************************************************************************************************************
+	 * Scheduling engine for real-time features, model creating and scoring updates.
+	 *****************************************************************************************************************/
+	@EnableScheduling
+	@EnableAsync
+	class ScheduledActivity {
+		RollingMaster rollingMaster = new RollingMaster();
+		private String uuid = null;
+		private long count = 0;
+		GlobalSettings settings;
+		{
+			try {
+				settings = new GlobalSettings();
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 
-		count = count + 1;
+		/**
+		 * Continuous scheduling engine.
+		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
+		 */
+		@Async
+		@Qualifier(value = "taskExecutor")
+		// @Scheduled(cron = "*/20 * * * * *") // 240000 = 4 mins, 420000 = 7 mins
+		@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 10000)
+		public void scheduleFixedRateTaskAsync() {
 
-		System.out.println("==================================================================================================");
-		System.out.println("===>>> Execute Monitoring Engine (" + count + "): " + RollingMaster.nowDate());
-		System.out.println("====================================================================================================");
+			/** PROCESS INDEXES ONCE PER STARTUP */
+			if (count == 0)
+				rollingMaster.indexes();
 
-		String uuid = RollingMaster.checkCorpora(settings);
+			count = count + 1;
 
-		if (uuid != null)
-			rollingMaster.process();
+			System.out.println("==================================================================================================");
+			System.out.println("===>>> I Execute Dynamic Engine (" + count + "): " + RollingMaster.nowDate());
+			System.out.println("==================================================================================================");
+			String uuid = RollingMaster.checkCorpora(settings);
 
+			/**
+			 * Do not run these processes as threads to remove overhead on processing engine.
+			 */
+
+			//TODO: SETTING TO ENABLE AUTO-SCHEDULED UPDATES FOR DYNAMIC CONFIGURATION
+
+			/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
+			if (uuid != null)
+				rollingMaster.process();
+
+		}
 	}
+
+
+
+
+	/*****************************************************************************************************************
+	 * Scheduling engine for real-time features, model creating and scoring updates.
+	 *****************************************************************************************************************/
+	@EnableScheduling
+	@EnableAsync
+	class ScheduledActivityRealTimeTraining {
+		RollingFeatures rollingFeatures = new RollingFeatures();
+		private String uuid = null;
+		private long count = 0;
+		GlobalSettings settings;
+		{
+			try {
+				settings = new GlobalSettings();
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
+
+		/**
+		 * Continous scheduling engine.
+		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
+		 */
+		@Async
+		@Qualifier(value = "taskExecutor2")
+		@Scheduled(fixedDelayString = "${feature.delay}000", initialDelay = 10000)
+		public void scheduleFixedRateTaskAsync() {
+
+			count = count + 1;
+
+			System.out.println("==================================================================================================");
+			System.out.println("===>>> II Execute Features and Training Engine (" + count + "): " + RollingMaster.nowDate());
+			System.out.println("==================================================================================================");
+
+			/**
+			 * Do not run these processes as threads to remove overhead on processing engine.
+			 */
+
+			//TODO: SETTING TO ENABLE AUTO-SCHEDULED UPDATES FOR REAL-TIME FEATURES AND MODELS
+
+			/** PROCESS REAL-TIME FEATURE CREATION */
+			rollingFeatures.process();
+
+			/** PROCESS REAL-TIME MODEL BUILDING */
+			// TODO
+
+			/** PROCESS OUTBOUND SCHEDULES */
+			// TODO
+
+		}
+	}
+
 }
