@@ -9,7 +9,7 @@ public class PrePredictCustomer {
     }
 
     /**
-     * Pre-pre predict
+     * Pre-pre predict, after feature store is read and before dynamic and static corpora.
      */
     public void getPrePredict() {
     }
