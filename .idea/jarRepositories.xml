@@ -42,6 +42,11 @@
       <option name="url" value="http://customer.ecosystem.ai/ecosystem-runtime-0.8.5.0.jar" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="ecosystem-repo" />
+      <option name="name" value="ecosystem-repo" />
+      <option name="url" value="http://maven.ecosystem.ai:50000/maven-repository" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="internal.repo" />
       <option name="name" value="Temporary Staging Repository" />
       <option name="url" value="file://$PROJECT_DIR$/target/mvn-repo" />
@@ -50,11 +55,6 @@
       <option name="id" value="confluent" />
       <option name="name" value="confluent" />
       <option name="url" value="https://packages.confluent.io/maven/" />
-    </remote-repository>
-    <remote-repository>
-      <option name="id" value="ecosystem-repo" />
-      <option name="name" value="ecosystem-repo" />
-      <option name="url" value="http://maven.ecosystem.ai:50000/maven-repository" />
     </remote-repository>
   </component>
 </project>

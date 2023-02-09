@@ -1,5 +1,6 @@
 package com.ecosystem.runtime;
 
+import com.ecosystem.runtime.continuous.RollingFeatures;
 import com.ecosystem.utils.GlobalSettings;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -115,7 +116,8 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivity {
-		RollingMaster rollingMaster = new RollingMaster();
+		com.ecosystem.runtime.continuous.RollingMaster rollingMaster = new com.ecosystem.runtime.continuous.RollingMaster();
+
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -128,35 +130,38 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 		}
 
 		/**
-		 * Continuous scheduling engine.
+		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
 		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
 		 */
 		@Async
 		@Qualifier(value = "taskExecutor")
 		// @Scheduled(cron = "*/20 * * * * *") // 240000 = 4 mins, 420000 = 7 mins
 		@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 10000)
-		public void scheduleFixedRateTaskAsync() {
+		public void scheduleFixedRateTaskAsync() throws Exception {
 
-			/** PROCESS INDEXES ONCE PER STARTUP */
-			if (count == 0)
-				rollingMaster.indexes();
-
-			count = count + 1;
-
-			System.out.println("==================================================================================================");
-			System.out.println("===>>> I Execute Dynamic Engine (" + count + "): " + RollingMaster.nowDate());
-			System.out.println("==================================================================================================");
-			String uuid = RollingMaster.checkCorpora(settings);
-
-			/**
-			 * Do not run these processes as threads to remove overhead on processing engine.
-			 */
-
-			//TODO: SETTING TO ENABLE AUTO-SCHEDULED UPDATES FOR DYNAMIC CONFIGURATION
+			// TODO: Test if there are changes to ecosystem.properties and then call /refresh if it changed.
 
 			/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
-			if (uuid != null)
+			settings = new GlobalSettings();
+			String uuid = com.ecosystem.runtime.continuous.RollingMaster.checkCorpora(settings);
+
+			if (uuid != null) {
+
+				System.out.println("A==================================================================================================");
+				System.out.println("A===>>> Execute Dynamic Engine (" + count + "): " + com.ecosystem.runtime.continuous.RollingMaster.nowDate());
+				System.out.println("A==================================================================================================");
+
+				// rollingNaiveBayes.process();
+
+				/** PROCESS INDEXES ONCE PER STARTUP */
+				if (count == 0)
+					rollingMaster.indexes();
+
 				rollingMaster.process();
+
+			}
+
+			count = count + 1;
 
 		}
 	}
@@ -170,7 +175,7 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivityRealTimeTraining {
-		RollingFeatures rollingFeatures = new RollingFeatures();
+		com.ecosystem.runtime.continuous.RollingFeatures rollingFeatures = new RollingFeatures();
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -184,33 +189,22 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 
 		/**
 		 * Continous scheduling engine.
-		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
+		 * Set FEATURE_DELAY in seconds for processing, default is set to 10 mins.
 		 */
 		@Async
 		@Qualifier(value = "taskExecutor2")
-		@Scheduled(fixedDelayString = "${feature.delay}000", initialDelay = 10000)
-		public void scheduleFixedRateTaskAsync() {
+		@Scheduled(fixedDelayString = "${feature.delay}000", initialDelay = 80000)
+		public void scheduleFixedRateTaskAsync() throws Exception {
 
-			count = count + 1;
-
-			System.out.println("==================================================================================================");
-			System.out.println("===>>> II Execute Features and Training Engine (" + count + "): " + RollingMaster.nowDate());
-			System.out.println("==================================================================================================");
-
-			/**
-			 * Do not run these processes as threads to remove overhead on processing engine.
-			 */
-
-			//TODO: SETTING TO ENABLE AUTO-SCHEDULED UPDATES FOR REAL-TIME FEATURES AND MODELS
+			System.out.println("F==================================================================================================");
+			System.out.println("F===>>> Execute Features and Training Engine (" + count + "): " + com.ecosystem.runtime.continuous.RollingMaster.nowDate());
+			System.out.println("F==================================================================================================");
 
 			/** PROCESS REAL-TIME FEATURE CREATION */
+			settings = new GlobalSettings();
 			rollingFeatures.process();
 
-			/** PROCESS REAL-TIME MODEL BUILDING */
-			// TODO
-
-			/** PROCESS OUTBOUND SCHEDULES */
-			// TODO
+			count = count + 1;
 
 		}
 	}

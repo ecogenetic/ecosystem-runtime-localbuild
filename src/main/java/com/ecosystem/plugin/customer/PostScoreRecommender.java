@@ -1,13 +1,12 @@
 package com.ecosystem.plugin.customer;
 
 import com.datastax.oss.driver.api.core.CqlSession;
-import com.ecosystem.plugin.customer.PostScorePattern;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -15,7 +14,8 @@ import java.io.IOException;
 
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
- * 21 July 2021 - New MAB implementation
+ * Use this class to perform generic scoring based on model and generic settings with label from scoring.
+ * 28 January 2022
  */
 public class PostScoreRecommender {
 	private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommender.class.getName());
@@ -56,36 +56,54 @@ public class PostScoreRecommender {
 			/* Setup JSON objects for specific prediction case */
 			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
 			if (predictModelMojoResult.has("ErrorMessage")) {
+				LOGGER.error("getPostPredict:E001a:" + predictModelMojoResult.get("ErrorMessage"));
 				return null;
 			}
-			JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
-			String label = predictModelMojoResult.getJSONArray("label").getString(0);
-			JSONArray probabilities = predictModelMojoResult.getJSONArray("probability");
-			JSONArray domains = predictModelMojoResult.getJSONArray("domains");
+
+			JSONArray offerMatrix = new JSONArray();
+			if (params.has("offerMatrix"))
+				offerMatrix = params.getJSONArray("offerMatrix");
 
 			JSONObject work = params.getJSONObject("in_params");
 
+			JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
+			String label = predictModelMojoResult.getJSONArray("label").getString(0);
+
+			JSONArray probabilities = new JSONArray();
+			if (predictModelMojoResult.has("probability"))
+				probabilities = predictModelMojoResult.getJSONArray("probability");
+			else
+				probabilities = predictModelMojoResult.getJSONArray("probabilities");
+
+			JSONArray domains = predictModelMojoResult.getJSONArray("domains");
+
 			JSONArray finalOffers = new JSONArray();
+			int resultcount = (int) params.get("resultcount");
 			int offerIndex = 0;
-			int explore = 0;
-			JSONObject finalOffersObject = new JSONObject();
 
-			finalOffersObject.put("offer", label);
-			finalOffersObject.put("offer_name", label);
-			finalOffersObject.put("offer_name_desc", label);
+			/** Select top items based on number of offers to present */
+			for (int i = 0; i < resultcount; i++) {
+				int explore = (int) params.get("explore");
+				JSONObject finalOffersObject = new JSONObject();
 
-			/* process final */
-			double p = domainsProbabilityObj.getDouble(label);
-			finalOffersObject.put("score", p);
-			finalOffersObject.put("final_score", p);
-			finalOffersObject.put("modified_offer_score", p);
-			finalOffersObject.put("offer_value", 1.0); // use value from offer matrix
+				finalOffersObject.put("offer", label);
+				finalOffersObject.put("offer_name", label);
+				finalOffersObject.put("offer_name_desc", label + " - " + i);
 
-			finalOffersObject.put("p", p);
-			finalOffersObject.put("explore", explore);
+				/** process final */
+				double p = domainsProbabilityObj.getDouble(label);
+				finalOffersObject.put("score", p);
+				finalOffersObject.put("final_score", p);
+				finalOffersObject.put("modified_offer_score", p);
+				finalOffersObject.put("offer_value", 1.0); // use value from offer matrix
 
-			finalOffers.put(offerIndex, finalOffersObject);
-			offerIndex = offerIndex + 1;
+				finalOffersObject.put("p", p);
+				finalOffersObject.put("explore", explore);
+
+				/** Prepare array before final sort */
+				finalOffers.put(offerIndex, finalOffersObject);
+				offerIndex = offerIndex + 1;
+			}
 
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "score", "double", "d");
 			predictModelMojoResult.put("final_result", sortJsonArray);
