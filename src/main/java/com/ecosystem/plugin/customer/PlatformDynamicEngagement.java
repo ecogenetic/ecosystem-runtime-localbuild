@@ -3,16 +3,15 @@ package com.ecosystem.plugin.customer;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
  * Use this class to score with dynamic sampling configurations. This class is configured to work with no model.
- * 1 Nov 2022 - Updated
  */
 public class PlatformDynamicEngagement extends PostScoreSuper {
 	private static final Logger LOGGER = LogManager.getLogger(PlatformDynamicEngagement.class.getName());
@@ -39,15 +38,18 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 	public static JSONObject getPostPredict(JSONObject predictModelMojoResult, JSONObject params, CqlSession session, EasyPredictModelWrapper[] models) {
 		double startTimePost = System.nanoTime();
 		try {
-			/* Setup JSON objects for specific prediction case */
+			/** Setup JSON objects for specific prediction case */
 			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
 			//JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
-			//JSONArray offerMatrix = params.getJSONArray("offerMatrix");
-			JSONObject work = params.getJSONObject("in_params");
 
-			/* Personality and base spend score */
-			// double probability = (double) domainsProbabilityObj.get("1");
-			//double probability = 1.0;
+			JSONObject offerMatrixWithKey = new JSONObject();
+			boolean om = false;
+			if (params.has("offerMatrixWithKey")) {
+				offerMatrixWithKey = params.getJSONObject("offerMatrixWithKey");
+				om = true;
+			}
+
+			JSONObject work = params.getJSONObject("in_params");
 
 			/***************************************************************************************************/
 			/** Standardized approach to access dynamic datasets in plugin.
@@ -100,59 +102,89 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					double alpha = (double) DataTypeConversions.getDoubleFromIntLong(option.get("alpha"));
 					double beta = (double) DataTypeConversions.getDoubleFromIntLong(option.get("beta"));
 					double accuracy = 0.001;
-					if (option.has("accuracy")) accuracy = (double) DataTypeConversions.getDoubleFromIntLong(option.get("accuracy"));
+					if (option.has("accuracy"))
+						accuracy = (double) DataTypeConversions.getDoubleFromIntLong(option.get("accuracy"));
 
 					/***************************************************************************************************/
 					/* r IS THE RANDOMIZED SCORE VALUE */
 					double p = 0.0;
 					double arm_reward = 0.001;
 					if (randomisation.getString("approach").equals("epsilonGreedy")) {
-					//						params = getExplore(params, randomisation.getDouble("epsilon"), "explore");
-					//						explore = params.getInt("explore");
-					//						p = option.getDouble("weighting");
-					//						if (explore == 1)
-					//							arm_reward = MathRandomizer.getRandomIntBetweenRange(0, 1);
-					//						else
-					//							arm_reward = 1.0;
-
-						params.put("explore", 0);
+						// params.put("explore", 0);
 						explore = 0;
 						p = DataTypeConversions.getDouble(option, "arm_reward");
 						arm_reward = p;
-
 					} else {
-
 						/** REMEMBER THAT THIS IS HERE BECAUSE OF BATCH PROCESS, OTHERWISE IT REQUIRES THE TOTAL COUNTS */
 						/* Phase 2: sampling - calculate the arms and rank them */
-						params.put("explore", 0); // force explore to zero and use Thompson Sampling only!!
+						// params.put("explore", 0); // force explore to zero and use Thompson Sampling only!!
 						explore = 0; // set as explore as the dynamic responder is exploration based...
 						p = DataTypeConversions.getDouble(option, "arm_reward");
 						arm_reward = p;
 
 					}
+					/** Check if values are correct */
+					if (p != p) p = 0.0;
+					if (alpha != alpha) alpha = 0.0;
+					if (beta != beta) beta = 0.0;
+					if (arm_reward != arm_reward) arm_reward = 0.0;
 					/***************************************************************************************************/
+
+					String offer = option.getString("optionKey");
+
+					JSONObject singleOffer = new JSONObject();
+					double offer_value = 1.0;
+					double offer_cost = 1.0;
+					double modified_offer_score = p;
+					if (om) {
+						if (offerMatrixWithKey.has(offer)) {
+
+							singleOffer = offerMatrixWithKey.getJSONObject(offer);
+
+							if (singleOffer.has("offer_price"))
+								offer_value = DataTypeConversions.getDouble(singleOffer, "offer_price");
+							if (singleOffer.has("price"))
+								offer_value = DataTypeConversions.getDouble(singleOffer, "price");
+
+							if (singleOffer.has("offer_cost"))
+								offer_cost = singleOffer.getDouble("offer_cost");
+							if (singleOffer.has("cost"))
+								offer_cost = singleOffer.getDouble("cost");
+
+							modified_offer_score = p * ((double) offer_value - offer_cost);
+						}
+					}
 
 					JSONObject finalOffersObject = new JSONObject();
 
-					finalOffersObject.put("offer", option.getString("optionKey"));
-					finalOffersObject.put("offer_name", option.getString("optionKey"));
+					finalOffersObject.put("offer", offer);
+					finalOffersObject.put("offer_name", offer);
 					finalOffersObject.put("offer_name_desc", option.getString("option"));
 
 					/* process final */
 					finalOffersObject.put("score", p);
 					finalOffersObject.put("final_score", p);
-					finalOffersObject.put("modified_offer_score", p);
-					finalOffersObject.put("offer_value", 1.0);
+					finalOffersObject.put("modified_offer_score", modified_offer_score);
+					finalOffersObject.put("offer_value", offer_value);
+					finalOffersObject.put("price", offer_value);
+					finalOffersObject.put("cost", offer_cost);
 
 					finalOffersObject.put("p", p);
-					finalOffersObject.put("contextual_variable_one", contextual_variable_one_Option);
-					finalOffersObject.put("contextual_variable_two", contextual_variable_two_Option);
+					if (option.has("contextual_variable_one"))
+						finalOffersObject.put("contextual_variable_one", option.getString("contextual_variable_one"));
+					else
+						finalOffersObject.put("contextual_variable_one", "");
+
+					if (option.has("contextual_variable_two"))
+						finalOffersObject.put("contextual_variable_two", option.getString("contextual_variable_two"));
+					else
+						finalOffersObject.put("contextual_variable_two", "");
+
 					finalOffersObject.put("alpha", alpha);
 					finalOffersObject.put("beta", beta);
 					finalOffersObject.put("weighting", (double) DataTypeConversions.getDoubleFromIntLong(option.get("weighting")));
 					finalOffersObject.put("explore", explore);
 					finalOffersObject.put("uuid", params.get("uuid"));
-
 					finalOffersObject.put("arm_reward", arm_reward);
 
 					/* Debugging variables */
@@ -179,15 +211,15 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
 			predictModelMojoResult.put("final_result", sortJsonArray);
 
+			predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+
+			double endTimePost = System.nanoTime();
+			LOGGER.info("PlatformDynamicEngagement:I001: time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
+
 		} catch (Exception e) {
 			e.printStackTrace();
 			LOGGER.error(e);
 		}
-
-		predictModelMojoResult = getTopScores(params, predictModelMojoResult);
-
-		double endTimePost = System.nanoTime();
-		LOGGER.info("PlatformDynamicEngagement:I001: time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
 
 		return predictModelMojoResult;
 

@@ -3,9 +3,9 @@ package com.ecosystem.plugin.customer;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -92,6 +92,21 @@ public class PostScoreBasic extends PostScoreSuper {
 				else
 					finalOffersObject.put("offer", type);
 
+				if (featuresObj.has("offer_id"))
+					finalOffersObject.put("offer", featuresObj.getString("offer_id"));
+				else
+					finalOffersObject.put("offer_id", type);
+
+				if (featuresObj.has("price"))
+					finalOffersObject.put("price", featuresObj.get("price"));
+				else
+					finalOffersObject.put("price", 1.0);
+
+				if (featuresObj.has("cost"))
+					finalOffersObject.put("cost", featuresObj.get("cost"));
+				else
+					finalOffersObject.put("cost", 1.0);
+
 				/** Score based on model type */
 				if (type.contains("clustering")) {
 					finalOffersObject.put("cluster", predictModelMojoResult.getJSONArray("cluster").get(0));
@@ -137,6 +152,7 @@ public class PostScoreBasic extends PostScoreSuper {
 				/** Default value, could be replaced by offer matrix or feature store */
 				double offer_value = 1.0;
 				finalOffersObject.put("offer_value", offer_value);
+				finalOffersObject.put("uuid", params.get("uuid"));
 
 				/** Add other structures to the final result */
 				finalOffersObject.put("offer_matrix", featuresObj);

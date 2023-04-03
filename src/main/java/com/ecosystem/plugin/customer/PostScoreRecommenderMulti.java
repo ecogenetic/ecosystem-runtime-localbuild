@@ -6,11 +6,11 @@ import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
-import com.ecosystem.utils.log.LogManager;
-import com.ecosystem.utils.log.Logger;
 import com.ecosystem.worker.h2o.ModelPredictWorkerH2O;
 import hex.genmodel.easy.EasyPredictModelWrapper;
 import hex.genmodel.easy.RowData;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -20,7 +20,6 @@ import java.util.concurrent.ExecutionException;
 /**
  * recommender_smp - Multiple models for per product with Offermatrix
  * Binomial model per product, all loaded into memory, scoring per offerMatrix line item.
- * April 2022
  */
 public class PostScoreRecommenderMulti {
 
@@ -122,16 +121,20 @@ public class PostScoreRecommenderMulti {
             LOGGER.debug("singleOffer:D001-1: " + singleOffer.toString());
             LOGGER.debug("singleOffer:offer_id:D001-2: " + offer_id);
 
-            double offer_price = 1.0;
             /** Offer matrix needs item "price" for aggregator to work! */
-            if (!singleOffer.has("price"))
-                if(singleOffer.has("offer_price"))
-                    singleOffer.put("price", singleOffer.get("offer_price"));
-
-            if (singleOffer.has("price"))
+            double offer_price = 1.0;
+            if (singleOffer.has("offer_price"))
+                offer_price = DataTypeConversions.getDouble(singleOffer, "offer_price");
+            else if (singleOffer.has("price"))
                 offer_price = DataTypeConversions.getDouble(singleOffer, "price");
             else
                 LOGGER.error("PostScoreRecommenderMultiSafaricom:E0011: price not in offerMatrix, value set to 1");
+
+            double offer_cost = 1.0;
+            if (singleOffer.has("offer_cost"))
+                offer_cost = singleOffer.getDouble("offer_cost");
+            if (singleOffer.has("cost"))
+                offer_cost = singleOffer.getDouble("cost");
 
             int explore = (int) params.get("explore");
             JSONObject finalOffersObject = new JSONObject();
@@ -159,6 +162,8 @@ public class PostScoreRecommenderMulti {
             finalOffersObject.put("modified_offer_score", p);
             finalOffersObject.put("offer_value", offer_price); // use value from offer matrix
             // finalOffersObject.put("offer_profit_probability", offer_profit * p);
+            finalOffersObject.put("price", offer_price);
+            finalOffersObject.put("cost", offer_cost);
 
             finalOffersObject.put("p", p);
             finalOffersObject.put("explore", explore);
@@ -226,6 +231,10 @@ public class PostScoreRecommenderMulti {
     private static JSONObject setValues(JSONObject work) {
         JSONObject result = new JSONObject();
         result.put("score", work.get("score"));
+        if (work.has("price"))
+            result.put("price", work.get("price"));
+        if (work.has("cost"))
+            result.put("cost", work.get("cost"));
         result.put("final_score", work.get("score"));
         result.put("offer", work.get("offer"));
         result.put("offer_name", work.get("offer_name"));
