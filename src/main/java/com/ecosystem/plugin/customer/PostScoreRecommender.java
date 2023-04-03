@@ -4,9 +4,9 @@ import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -15,7 +15,6 @@ import java.io.IOException;
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
  * Use this class to perform generic scoring based on model and generic settings with label from scoring.
- * 28 January 2022
  */
 public class PostScoreRecommender {
 	private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommender.class.getName());
@@ -96,6 +95,9 @@ public class PostScoreRecommender {
 				finalOffersObject.put("final_score", p);
 				finalOffersObject.put("modified_offer_score", p);
 				finalOffersObject.put("offer_value", 1.0); // use value from offer matrix
+				finalOffersObject.put("price", 1.0);
+				finalOffersObject.put("cost", 1.0);
+				finalOffersObject.put("uuid", params.get("uuid"));
 
 				finalOffersObject.put("p", p);
 				finalOffersObject.put("explore", explore);
@@ -134,7 +136,6 @@ public class PostScoreRecommender {
 		return params;
 	}
 
-
 	/**
 	 * Get random results for MAB
 	 * @param predictResult
@@ -158,6 +159,10 @@ public class PostScoreRecommender {
 	private static JSONObject setValues(JSONObject work) {
 		JSONObject result = new JSONObject();
 		result.put("score", work.get("score"));
+		if (work.has("price"))
+			result.put("price", work.get("price"));
+		if (work.has("cost"))
+			result.put("cost", work.get("cost"));
 		result.put("final_score", work.get("score"));
 		result.put("offer", work.get("offer"));
 		result.put("offer_name", work.get("offer_name"));
@@ -181,7 +186,6 @@ public class PostScoreRecommender {
 
 		return offer;
 	}
-
 
 	/**
 	 * Review this: Master version in EcosystemMaster class. {offer_treatment_code: {$regex:"_A"}}
@@ -247,6 +251,5 @@ public class PostScoreRecommender {
 		}
 		return predictResult;
 	}
-
 
 }

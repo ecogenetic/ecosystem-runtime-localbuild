@@ -1,6 +1,8 @@
 package com.ecosystem.runtime;
 
 import com.ecosystem.runtime.continuous.RollingFeatures;
+import com.ecosystem.runtime.continuous.RollingMaster;
+import com.ecosystem.runtime.continuous.RollingNaiveBayes;
 import com.ecosystem.utils.GlobalSettings;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -12,6 +14,7 @@ import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 
+import org.json.JSONObject;
 import org.springdoc.core.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
@@ -111,13 +114,11 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
     }
 
 	/*****************************************************************************************************************
-	 * Scheduling engine for real-time features, model creating and scoring updates.
+	 * Scheduling engine for model creating and scoring updates.
 	 *****************************************************************************************************************/
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivity {
-		com.ecosystem.runtime.continuous.RollingMaster rollingMaster = new com.ecosystem.runtime.continuous.RollingMaster();
-
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -129,13 +130,15 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 			}
 		}
 
+		RollingMaster rollingMaster = new RollingMaster();
+		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes();
+
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
 		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
 		 */
 		@Async
 		@Qualifier(value = "taskExecutor")
-		// @Scheduled(cron = "*/20 * * * * *") // 240000 = 4 mins, 420000 = 7 mins
 		@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 10000)
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
@@ -143,21 +146,26 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 
 			/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
 			settings = new GlobalSettings();
-			String uuid = com.ecosystem.runtime.continuous.RollingMaster.checkCorpora(settings);
 
-			if (uuid != null) {
+			JSONObject paramDoc = rollingMaster.checkCorpora(settings);
+			String algo = paramDoc.getJSONObject("randomisation").getString("approach");
 
-				System.out.println("A==================================================================================================");
-				System.out.println("A===>>> Execute Dynamic Engine (" + count + "): " + com.ecosystem.runtime.continuous.RollingMaster.nowDate());
-				System.out.println("A==================================================================================================");
+			if (!paramDoc.isEmpty()) {
 
-				// rollingNaiveBayes.process();
+				System.out.println("A===========================================================================================================");
+				System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingMaster.nowDate());
+				System.out.println("A===========================================================================================================");
 
 				/** PROCESS INDEXES ONCE PER STARTUP */
 				if (count == 0)
 					rollingMaster.indexes();
 
-				rollingMaster.process();
+				if (algo.equals("binaryThompson"))
+					rollingMaster.process();
+				if (algo.equals("naiveBayes"))
+					rollingNaiveBayes.process(paramDoc);
+				// if (algo.equals("QLearning"))
+				// 	rollingNaiveBayes.process(paramDoc);
 
 			}
 
@@ -166,16 +174,12 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 		}
 	}
 
-
-
-
 	/*****************************************************************************************************************
-	 * Scheduling engine for real-time features, model creating and scoring updates.
+	 * Scheduling engine for real-time features.
 	 *****************************************************************************************************************/
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivityRealTimeTraining {
-		com.ecosystem.runtime.continuous.RollingFeatures rollingFeatures = new RollingFeatures();
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -186,6 +190,8 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 				throw new RuntimeException(e);
 			}
 		}
+
+		RollingFeatures rollingFeatures = new RollingFeatures();
 
 		/**
 		 * Continous scheduling engine.
@@ -197,12 +203,22 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
 			System.out.println("F==================================================================================================");
-			System.out.println("F===>>> Execute Features and Training Engine (" + count + "): " + com.ecosystem.runtime.continuous.RollingMaster.nowDate());
+			System.out.println("F===>>> Execute Features and Training Engine (" + count + "): " + RollingMaster.nowDate());
 			System.out.println("F==================================================================================================");
 
 			/** PROCESS REAL-TIME FEATURE CREATION */
-			settings = new GlobalSettings();
-			rollingFeatures.process();
+			try {
+
+				settings = new GlobalSettings();
+
+				rollingFeatures.process();
+
+			} catch (Exception e) {
+				System.out.println("F==================================================================================================");
+				System.out.println("F===>>> Feature creation engine not processing, check FEATURE_DELAY env variable.");
+				System.out.println("F==================================================================================================");
+				e.printStackTrace();
+			}
 
 			count = count + 1;
 
