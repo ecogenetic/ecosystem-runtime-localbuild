@@ -55,7 +55,7 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 @Configuration
 @EnableWebSecurity
 @EnableScheduling
-public class EcosystemApp extends WebSecurityConfigurerAdapter {
+public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 	GlobalSettings settings;
 	{
@@ -72,7 +72,7 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 		System.out.println("Version: 0.9.4.0 Build: 2023-05.00520");
 		System.out.println("============================================================");
 
-		SpringApplication.run(EcosystemApp.class, args);
+		SpringApplication.run(RuntimeApplication.class, args);
 
 	}
 
