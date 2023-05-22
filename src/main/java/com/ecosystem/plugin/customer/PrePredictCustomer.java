@@ -6,6 +6,7 @@ import org.json.JSONObject;
 public class PrePredictCustomer {
 
     public PrePredictCustomer() {
+
     }
 
     /**

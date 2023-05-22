@@ -59,6 +59,13 @@ public class PostScoreBasic extends PostScoreSuper {
 				}
 			}
 
+			if (params.has("preloadCorpora")) {
+				if (params.getJSONObject("preloadCorpora").has("network")) {
+					JSONObject a = params.getJSONObject("preloadCorpora");
+					JSONObject preloadCorpora = a.getJSONObject("network");
+				}
+			}
+
 			JSONArray finalOffers = new JSONArray();
 			int resultcount = (int) params.get("resultcount");
 			/* For each offer in offer matrix determine eligibility */
@@ -74,11 +81,14 @@ public class PostScoreBasic extends PostScoreSuper {
 				String type = "";
 				boolean explainability = false;
 				if (predictModelMojoResult.get("type").getClass().getName().toLowerCase().contains("array")) {
-					type = predictModelMojoResult.getJSONArray("type").get(0).toString().toLowerCase();
+					type = predictModelMojoResult
+							.getJSONArray("type")
+							.get(0)
+							.toString().toLowerCase().trim();
 					if (predictModelMojoResult.has("shapley_contributions"))
 						explainability = true;
 				} else {
-					type = ((String) predictModelMojoResult.get("type")).toLowerCase();
+					type = ((String) predictModelMojoResult.get("type")).toLowerCase().trim();
 				}
 
 				/** Offer name, defaults to type (replace with offer matrix etc) */
@@ -138,6 +148,18 @@ public class PostScoreBasic extends PostScoreSuper {
 					Object score = predictModelMojoResult.getJSONArray("value").get(0);
 					finalOffersObject.put("score", score);
 					finalOffersObject.put("modified_offer_score", score);
+				} else if (type.contains("wordembedding")) {
+					float[] score = (float[]) predictModelMojoResult.getJSONArray("_text_word2vec").get(0);
+					finalOffersObject.put("score", Double.valueOf(String.valueOf(score[0])));
+					finalOffersObject.put("embedding", score);
+					finalOffersObject.put("modified_offer_score", 0.0);
+				} else if (type.contains("deeplearning")) {
+					/** From TensorFlow or PyTorch */
+					Object score = domainsProbabilityObj.getDouble("1");
+					finalOffersObject.put("score", score);
+					finalOffersObject.put("modified_offer_score", score);
+					Object response = predictModelMojoResult.getJSONArray("response").get(0);
+					finalOffersObject.put("offer_name", response);
 				} else {
 					finalOffersObject.put("score", 1.0);
 					finalOffersObject.put("modified_offer_score", 1.0);

@@ -17,6 +17,7 @@ import java.io.IOException;
  * Use this class to perform generic scoring based on model and generic settings with label from scoring.
  */
 public class PostScoreRecommender {
+
 	private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommender.class.getName());
 
 	static GlobalSettings settings;
