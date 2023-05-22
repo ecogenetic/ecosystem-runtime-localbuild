@@ -14,6 +14,7 @@ import org.json.JSONObject;
  * Multiclass classifier trained on offer_name response column, offer matrix need to have all the offers loaded with offer_price.
  */
 public class PostScoreRecommenderOffers extends PostScoreSuper {
+
     private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommenderOffers.class.getName());
 
     public PostScoreRecommenderOffers() {

@@ -1,8 +1,6 @@
 package com.ecosystem.runtime;
 
-import com.ecosystem.runtime.continuous.RollingFeatures;
-import com.ecosystem.runtime.continuous.RollingMaster;
-import com.ecosystem.runtime.continuous.RollingNaiveBayes;
+import com.ecosystem.runtime.continuous.*;
 import com.ecosystem.utils.GlobalSettings;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -13,7 +11,6 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-
 import org.json.JSONObject;
 import org.springdoc.core.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -37,6 +34,11 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 
+/**
+ * Core application definition
+ *
+ * @author ecosystem
+ */
 @OpenAPIDefinition(
 		servers = {
 				@Server(url = "/", description = "Default Server URL")
@@ -54,10 +56,7 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 @EnableWebSecurity
 @EnableScheduling
 public class EcosystemApp extends WebSecurityConfigurerAdapter {
-	public static String version;
 
-	RollingMaster rollingMaster = new RollingMaster();
-	private long count = 0;
 	GlobalSettings settings;
 	{
 		try {
@@ -68,8 +67,14 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	}
 
 	public static void main(String[] args) {
-        SpringApplication.run(EcosystemApp.class, args);
-    }
+
+		System.out.println("============================================================");
+		System.out.println("Version: 0.9.4.0 Build: 2023-05.00520");
+		System.out.println("============================================================");
+
+		SpringApplication.run(EcosystemApp.class, args);
+
+	}
 
 	@Bean
 	public GroupedOpenApi publicApi() {
@@ -87,7 +92,7 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 								.description("The ecosystem.Ai Client Pulse Responder Engine brings the power of real-time and near-time predictions to the enterprise. Implement your behavioral construct " +
 										"and core hypotheses through a configurable prediction platform. If you don't know how the model is going to behave, use our behavioral tracker" +
 										"to assist with selection and exploit the most successful options.")
-								.version("v0.9.2")
+								.version("v0.9.4")
 								.license(new License().name("ecosystem.Ai 1.0").url("https://ecosystem.ai")))
 				.externalDocs(new ExternalDocumentation()
 						.description("Learn Ecosystem")
@@ -104,14 +109,14 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	/* This is to turn security off. Username and password is in the application.properties file */
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
-        System.out.println("Loading...");
+		System.out.println("Loading...");
 		http.csrf().disable()
 				.authorizeRequests()
 				.antMatchers(HttpMethod.GET, "/**").permitAll()
 				.antMatchers(HttpMethod.POST, "/**").permitAll()
 				.antMatchers(HttpMethod.PUT, "/**").permitAll();
 		System.out.println("Loaded...");
-    }
+	}
 
 	/*****************************************************************************************************************
 	 * Scheduling engine for model creating and scoring updates.
@@ -119,6 +124,7 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivity {
+
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -132,6 +138,8 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 
 		RollingMaster rollingMaster = new RollingMaster();
 		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes();
+		RollingBehavior rollingBehavior = new RollingBehavior();
+		RollingNetwork rollingNetwork = new RollingNetwork();
 
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
@@ -139,39 +147,44 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 		 */
 		@Async
 		@Qualifier(value = "taskExecutor")
-		@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 10000)
+		// @Scheduled(cron = "*/20 * * * * *") // 240000 = 4 mins, 420000 = 7 mins
+		@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 100000)
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
-			// TODO: Test if there are changes to ecosystem.properties and then call /refresh if it changed.
+			if (rollingMaster != null) {
 
-			/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
-			settings = new GlobalSettings();
+				/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
+				settings = new GlobalSettings();
 
-			JSONObject paramDoc = rollingMaster.checkCorpora(settings);
-			String algo = paramDoc.getJSONObject("randomisation").getString("approach");
+				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
+				if (!paramDoc.isEmpty()) {
 
-			if (!paramDoc.isEmpty()) {
+					String algo = paramDoc.getJSONObject("randomisation").getString("approach");
 
-				System.out.println("A===========================================================================================================");
-				System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingMaster.nowDate());
-				System.out.println("A===========================================================================================================");
+					System.out.println("A===========================================================================================================");
+					System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingMaster.nowDate());
+					System.out.println("A===========================================================================================================");
 
-				/** PROCESS INDEXES ONCE PER STARTUP */
-				if (count == 0)
-					rollingMaster.indexes();
+					/** PROCESS INDEXES ONCE PER STARTUP */
+					if (count == 0)
+						rollingMaster.indexes();
 
-				if (algo.equals("binaryThompson"))
-					rollingMaster.process();
-				if (algo.equals("naiveBayes"))
-					rollingNaiveBayes.process(paramDoc);
-				// if (algo.equals("QLearning"))
-				// 	rollingNaiveBayes.process(paramDoc);
+					if (algo.equals("binaryThompson"))
+						rollingMaster.process(paramDoc);
+					if (algo.equals("naiveBayes"))
+						rollingNaiveBayes.process(paramDoc);
+					if (algo.equals("behaviorAlgos"))
+						rollingBehavior.process(paramDoc);
+					if (algo.equals("Network"))
+						rollingNetwork.process(paramDoc);
 
+				}
+
+				count = count + 1;
 			}
 
-			count = count + 1;
-
 		}
+
 	}
 
 	/*****************************************************************************************************************
@@ -180,6 +193,7 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivityRealTimeTraining {
+
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -208,11 +222,8 @@ public class EcosystemApp extends WebSecurityConfigurerAdapter {
 
 			/** PROCESS REAL-TIME FEATURE CREATION */
 			try {
-
 				settings = new GlobalSettings();
-
 				rollingFeatures.process();
-
 			} catch (Exception e) {
 				System.out.println("F==================================================================================================");
 				System.out.println("F===>>> Feature creation engine not processing, check FEATURE_DELAY env variable.");

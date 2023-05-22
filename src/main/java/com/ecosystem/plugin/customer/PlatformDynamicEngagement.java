@@ -9,6 +9,10 @@ import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
  * Use this class to score with dynamic sampling configurations. This class is configured to work with no model.
@@ -57,18 +61,24 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			 * The optionParams is the parameter set that will influence the real-time behavior through param changes.
 			 */
 			/***************************************************************************************************/
-			JSONArray options = (JSONArray) ((
-					(JSONObject) params.getJSONObject("dynamicCorpora")
-							.get("dynamic_engagement_options")).get("data"));
-			JSONObject optionParams = (JSONObject) ((
-					(JSONObject) params.getJSONObject("dynamicCorpora")
-							.get("dynamic_engagement")).get("data"));
+			JSONArray options = params
+					.getJSONObject("dynamicCorpora")
+					.getJSONObject("dynamic_engagement_options")
+					.getJSONArray("data");
+			JSONObject optionParams = params
+					.getJSONObject("dynamicCorpora")
+					.getJSONObject("dynamic_engagement")
+					.getJSONObject("data");
+
+			JSONObject locations = params
+					.optJSONObject("preloadCorpora")
+					.optJSONObject("locations");
 
 			JSONObject contextual_variables = optionParams.getJSONObject("contextual_variables");
 			JSONObject randomisation = optionParams.getJSONObject("randomisation");
 
 			/***************************************************************************************************/
-			/* Test if contextual variable is coming via api or feature store: API takes preference... */
+			/** Test if contextual variable is coming via api or feature store: API takes preference... */
 			if (!work.has("contextual_variable_one")) {
 				if (featuresObj.has(contextual_variables.getString("contextual_variable_one_name")))
 					work.put("contextual_variable_one", featuresObj.get(contextual_variables.getString("contextual_variable_one_name")));
@@ -90,6 +100,50 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
 			for (int j = 0; j < options.length(); j++) {
 				JSONObject option = options.getJSONObject(j);
+				String offer = option.getString("optionKey");
+
+
+				/** Test eligibility TODO: CREATE A SEPARATE SUPERCLASS WITH THIS IN IT! */
+				if (locations != null) {
+					try {
+						if (locations.getJSONObject(offer).has("open_times")) {
+							String day = params.getJSONObject("in_params").getString("day");
+							String time = params.getJSONObject("in_params").getString("time");
+
+							if (locations.getJSONObject(offer).getJSONObject("open_times").has(day)) {
+								if (locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).has("opening1") &&
+										locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).has("closing1")) {
+
+									LOGGER.info("It's Open!");
+									if (!locations.getJSONObject(offer).getJSONObject("open_times").getString("operatingStatus").equals("operating"))
+										continue;
+
+									SimpleDateFormat sdf = new SimpleDateFormat("hh:mm a");
+
+									Date opening = sdf.parse(locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).getString("opening1"));
+									Date closing = sdf.parse(locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).getString("closing1"));
+									if (closing.before(opening)) {
+										Calendar cal = Calendar.getInstance();
+										cal.setTime(closing);
+										cal.add(Calendar.DATE, 1);
+										closing = cal.getTime();
+									}
+									Date time_now = sdf.parse(time);
+									if (time_now.after(opening) && time_now.before(closing)) {
+										LOGGER.info("It's Open!");
+									} else {
+										continue;
+									}
+
+								}
+							}
+						}
+					} catch (Exception e) {
+						LOGGER.info("\n\n" + offer + " -> Oh no, there's something wrong with the time range check, and will be ignored! use api params: {day:'monday', 'time': '11.00 AM'} " + e.getMessage() + "\n\n");
+					}
+				}
+
+
 				String contextual_variable_one_Option = "";
 				if (option.has("contextual_variable_one") && !contextual_variable_one.equals(""))
 					contextual_variable_one_Option = String.valueOf(option.get("contextual_variable_one"));
@@ -109,28 +163,21 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					/* r IS THE RANDOMIZED SCORE VALUE */
 					double p = 0.0;
 					double arm_reward = 0.001;
-					if (randomisation.getString("approach").equals("epsilonGreedy")) {
-						// params.put("explore", 0);
-						explore = 0;
-						p = DataTypeConversions.getDouble(option, "arm_reward");
-						arm_reward = p;
-					} else {
-						/** REMEMBER THAT THIS IS HERE BECAUSE OF BATCH PROCESS, OTHERWISE IT REQUIRES THE TOTAL COUNTS */
-						/* Phase 2: sampling - calculate the arms and rank them */
-						// params.put("explore", 0); // force explore to zero and use Thompson Sampling only!!
-						explore = 0; // set as explore as the dynamic responder is exploration based...
-						p = DataTypeConversions.getDouble(option, "arm_reward");
-						arm_reward = p;
 
+					explore = 0;
+					if (option.has("arm_reward")) {
+						p = (double) option.get("arm_reward");
+					} else {
+						p = arm_reward;
 					}
+					arm_reward = p;
+
 					/** Check if values are correct */
 					if (p != p) p = 0.0;
 					if (alpha != alpha) alpha = 0.0;
 					if (beta != beta) beta = 0.0;
 					if (arm_reward != arm_reward) arm_reward = 0.0;
 					/***************************************************************************************************/
-
-					String offer = option.getString("optionKey");
 
 					JSONObject singleOffer = new JSONObject();
 					double offer_value = 1.0;
