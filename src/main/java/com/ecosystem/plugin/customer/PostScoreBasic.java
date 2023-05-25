@@ -93,17 +93,17 @@ public class PostScoreBasic extends PostScoreSuper {
 
 				/** Offer name, defaults to type (replace with offer matrix etc) */
 				if (featuresObj.has("offer_name_final"))
-					finalOffersObject.put("offer_name", featuresObj.getString("offer_name_final"));
+					finalOffersObject.put("offer_name", featuresObj.get("offer_name_final"));
 				else
 					finalOffersObject.put("offer_name", type);
 
 				if (featuresObj.has("offer"))
-					finalOffersObject.put("offer", featuresObj.getString("offer"));
+					finalOffersObject.put("offer", featuresObj.get("offer"));
 				else
 					finalOffersObject.put("offer", type);
 
 				if (featuresObj.has("offer_id"))
-					finalOffersObject.put("offer", featuresObj.getString("offer_id"));
+					finalOffersObject.put("offer", featuresObj.get("offer_id"));
 				else
 					finalOffersObject.put("offer_id", type);
 
@@ -160,6 +160,29 @@ public class PostScoreBasic extends PostScoreSuper {
 					finalOffersObject.put("modified_offer_score", score);
 					Object response = predictModelMojoResult.getJSONArray("response").get(0);
 					finalOffersObject.put("offer_name", response);
+				} else if (type.contains("empty score")) {
+					/** This is typically used for data lookup only, obtain values from feature store! */
+					if (featuresObj.has("offer_name"))
+						finalOffersObject.put("offer_name", featuresObj.get("offer_name"));
+
+					if (featuresObj.has("offer"))
+						finalOffersObject.put("offer", featuresObj.get("offer"));
+
+					if (featuresObj.has("score"))
+						finalOffersObject.put("score", Double.valueOf(String.valueOf(featuresObj.get("score"))));
+					else
+						finalOffersObject.put("score", 1.0);
+
+					if (featuresObj.has("modified_offer_score"))
+						finalOffersObject.put("modified_offer_score", Double.valueOf(String.valueOf(featuresObj.get("modified_offer_score"))));
+					else
+						finalOffersObject.put("modified_offer_score", 1.0);
+
+					if (featuresObj.has("cost"))
+						finalOffersObject.put("cost", Double.valueOf(String.valueOf(featuresObj.get("cost"))));
+					else
+						finalOffersObject.put("cost", 0.0);
+
 				} else {
 					finalOffersObject.put("score", 1.0);
 					finalOffersObject.put("modified_offer_score", 1.0);
