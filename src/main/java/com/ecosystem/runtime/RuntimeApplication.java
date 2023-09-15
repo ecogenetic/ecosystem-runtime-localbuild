@@ -69,7 +69,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 	public static void main(String[] args) {
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.0 Build: 2023-05.00520");
+		System.out.println("Version: 0.9.4.1 Build: 2023-09.102");
 		System.out.println("============================================================");
 
 		SpringApplication.run(RuntimeApplication.class, args);
@@ -124,7 +124,6 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivity {
-
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -140,6 +139,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes();
 		RollingBehavior rollingBehavior = new RollingBehavior();
 		RollingNetwork rollingNetwork = new RollingNetwork();
+		RollingQLearning rollingQLearning = new RollingQLearning();
 
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
@@ -177,7 +177,6 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 						rollingBehavior.process(paramDoc);
 					if (algo.equals("Network"))
 						rollingNetwork.process(paramDoc);
-
 				}
 
 				count = count + 1;
@@ -187,13 +186,15 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 	}
 
+
+
+
 	/*****************************************************************************************************************
 	 * Scheduling engine for real-time features.
 	 *****************************************************************************************************************/
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivityRealTimeTraining {
-
 		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
@@ -224,6 +225,8 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 			try {
 				settings = new GlobalSettings();
 				rollingFeatures.process();
+				rollingFeatures.settingsConnection.closeMongoClient();
+
 			} catch (Exception e) {
 				System.out.println("F==================================================================================================");
 				System.out.println("F===>>> Feature creation engine not processing, check FEATURE_DELAY env variable.");
@@ -235,5 +238,4 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 		}
 	}
-
 }
