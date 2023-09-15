@@ -80,6 +80,7 @@ public class PostScoreBasic extends PostScoreSuper {
 				/** Model type based approaches */
 				String type = "";
 				boolean explainability = false;
+				// LOGGER.info("predictModelMojoResult: " + predictModelMojoResult.toString());
 				if (predictModelMojoResult.get("type").getClass().getName().toLowerCase().contains("array")) {
 					type = predictModelMojoResult
 							.getJSONArray("type")
