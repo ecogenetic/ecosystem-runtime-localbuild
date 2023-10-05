@@ -185,57 +185,5 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		}
 
 	}
-
-
-
-
-	/*****************************************************************************************************************
-	 * Scheduling engine for real-time features.
-	 *****************************************************************************************************************/
-	@EnableScheduling
-	@EnableAsync
-	class ScheduledActivityRealTimeTraining {
-		private String uuid = null;
-		private long count = 0;
-		GlobalSettings settings;
-		{
-			try {
-				settings = new GlobalSettings();
-			} catch (Exception e) {
-				throw new RuntimeException(e);
-			}
-		}
-
-		RollingFeatures rollingFeatures = new RollingFeatures();
-
-		/**
-		 * Continous scheduling engine.
-		 * Set FEATURE_DELAY in seconds for processing, default is set to 10 mins.
-		 */
-		@Async
-		@Qualifier(value = "taskExecutor2")
-		@Scheduled(fixedDelayString = "${feature.delay}000", initialDelay = 80000)
-		public void scheduleFixedRateTaskAsync() throws Exception {
-
-			System.out.println("F==================================================================================================");
-			System.out.println("F===>>> Execute Features and Training Engine (" + count + "): " + RollingMaster.nowDate());
-			System.out.println("F==================================================================================================");
-
-			/** PROCESS REAL-TIME FEATURE CREATION */
-			try {
-				settings = new GlobalSettings();
-				rollingFeatures.process();
-				rollingFeatures.settingsConnection.closeMongoClient();
-
-			} catch (Exception e) {
-				System.out.println("F==================================================================================================");
-				System.out.println("F===>>> Feature creation engine not processing, check FEATURE_DELAY env variable.");
-				System.out.println("F==================================================================================================");
-				e.printStackTrace();
-			}
-
-			count = count + 1;
-
-		}
-	}
+	
 }
