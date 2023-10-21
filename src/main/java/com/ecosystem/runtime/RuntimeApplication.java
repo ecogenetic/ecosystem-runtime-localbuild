@@ -69,7 +69,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 	public static void main(String[] args) {
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.1 Build: 2023-09.102");
+		System.out.println("Version: 0.9.4.1 Build: 2023-10.029");
 		System.out.println("============================================================");
 
 		SpringApplication.run(RuntimeApplication.class, args);
@@ -147,16 +147,21 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		 */
 		@Async
 		@Qualifier(value = "taskExecutor")
-		// @Scheduled(cron = "*/20 * * * * *") // 240000 = 4 mins, 420000 = 7 mins
-		@Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 100000)
+		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
+
+			System.out.println("Scheduler: " + count + " - " + RollingMaster.nowDate());
 
 			if (rollingMaster != null) {
 
 				/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
 				settings = new GlobalSettings();
 
+				if (rollingMaster.mongoDynamicRecommender == null && settings.getCorpora() != null)
+					rollingMaster = new RollingMaster();
+
 				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
+
 				if (!paramDoc.isEmpty()) {
 
 					String algo = paramDoc.getJSONObject("randomisation").getString("approach");
