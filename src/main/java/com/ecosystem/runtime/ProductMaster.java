@@ -136,8 +136,21 @@ public class ProductMaster extends ProductMasterSuper {
             if (predictResult.has("ErrorMessage")) {
                 predictResult.put("error", 1);
             }
-
             predictResult.remove("predict_result");
+
+            String detail = "full";
+            if (paramsParams.has("detail"))
+                detail = paramsParams.getString("detail");
+            if (detail.contains("spam") || subcampaign.contains("spam")) {
+                JSONObject newResult = new JSONObject();
+                newResult.put("uuid", predictResult.getJSONArray("final_result").getJSONObject(0).getJSONObject("result_full").get("uuid"));
+                newResult.put("offer", predictResult.getJSONArray("final_result").getJSONObject(0).getJSONObject("result_full").get("offer"));
+                newResult.put("ham_confidence", predictResult.getJSONArray("final_result").getJSONObject(0).getJSONObject("result_full").get("ham_confidence"));
+                newResult.put("spam_confidence", predictResult.getJSONArray("final_result").getJSONObject(0).getJSONObject("result_full").get("spam_confidence"));
+                newResult.put("spam", predictResult.getJSONArray("final_result").getJSONObject(0).getJSONObject("result_full").get("spam"));
+                predictResult = newResult;
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
             predictResult.put("ErrorMessage", e.getMessage());
