@@ -1,6 +1,7 @@
 package com.ecosystem.plugin.customer;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.ecosystem.plugin.DynamicClassLoader;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
 import hex.genmodel.easy.EasyPredictModelWrapper;
@@ -42,6 +43,13 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 	public static JSONObject getPostPredict(JSONObject predictModelMojoResult, JSONObject params, CqlSession session, EasyPredictModelWrapper[] models) {
 		double startTimePost = System.nanoTime();
 		try {
+
+			DynamicClassLoader dynamicClassLoader = new DynamicClassLoader("com.ecosystem.plugin.business.BusinessLogic", true);
+			dynamicClassLoader.loadClass("com.ecosystem.plugin.business.BusinessLogic");
+
+			params = com.ecosystem.plugin.business.BusinessLogic.getValues(params);
+
+
 			/** Setup JSON objects for specific prediction case */
 			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
 			//JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
@@ -49,6 +57,7 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			JSONObject offerMatrixWithKey = new JSONObject();
 			boolean om = false;
 			if (params.has("offerMatrixWithKey")) {
+				LOGGER.info("No Offer Matrix configured, using generated defaults.");
 				offerMatrixWithKey = params.getJSONObject("offerMatrixWithKey");
 				om = true;
 			}
@@ -61,18 +70,9 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			 * The optionParams is the parameter set that will influence the real-time behavior through param changes.
 			 */
 			/***************************************************************************************************/
-			JSONArray options = params
-					.getJSONObject("dynamicCorpora")
-					.getJSONObject("dynamic_engagement_options")
-					.getJSONArray("data");
-			JSONObject optionParams = params
-					.getJSONObject("dynamicCorpora")
-					.getJSONObject("dynamic_engagement")
-					.getJSONObject("data");
-
-			JSONObject locations = params
-					.optJSONObject("preloadCorpora")
-					.optJSONObject("locations");
+			JSONArray options = getOptions(params);
+			JSONObject optionParams = getOptionsParams(params);
+			JSONObject locations = getLocations(params);
 
 			JSONObject contextual_variables = optionParams.getJSONObject("contextual_variables");
 			JSONObject randomisation = optionParams.getJSONObject("randomisation");
@@ -100,8 +100,19 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
 			for (int j = 0; j < options.length(); j++) {
 				JSONObject option = options.getJSONObject(j);
-				String offer = option.getString("optionKey");
 
+				/** Skip the item if offer matrix does not contain option */
+				/*
+				if (!offerMatrixWithKey.has(option.getString("optionKey")))
+					continue;
+				 */
+				/** GENERATE DEFAULT IF OPTION IS NOT IN OFFER MATRIX! */
+				String offer = option.getString("optionKey");
+				if (!offerMatrixWithKey.has(option.getString("optionKey"))) {
+					JSONObject singleOffer = defaultOffer(offer);
+					offerMatrixWithKey.put(option.getString("optionKey"), singleOffer);
+					LOGGER.warn("BEWARE, DEFAULT OFFER GENERATED. IN OPTIONS STORE AND NOT OFFER MATRIX: " + option.getString("optionKey"));
+				}
 
 				/** Test eligibility TODO: CREATE A SEPARATE SUPERCLASS WITH THIS IN IT! */
 				if (locations != null) {
