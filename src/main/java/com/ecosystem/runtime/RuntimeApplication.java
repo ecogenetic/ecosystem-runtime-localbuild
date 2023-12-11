@@ -67,13 +67,15 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 	}
 
 	public static void main(String[] args) {
-
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.1 Build: 2023-10.029");
+		System.out.println("Version: 0.9.4.1 Build: 2023-12.288");
 		System.out.println("============================================================");
 
 		SpringApplication.run(RuntimeApplication.class, args);
 
+		System.out.println("====================================================================================");
+		System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
+		System.out.println("====================================================================================");
 	}
 
 	@Bean
@@ -139,7 +141,6 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes();
 		RollingBehavior rollingBehavior = new RollingBehavior();
 		RollingNetwork rollingNetwork = new RollingNetwork();
-		RollingQLearning rollingQLearning = new RollingQLearning();
 
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
