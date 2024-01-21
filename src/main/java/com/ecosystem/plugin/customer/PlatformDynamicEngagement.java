@@ -2,6 +2,7 @@ package com.ecosystem.plugin.customer;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.plugin.DynamicClassLoader;
+import com.ecosystem.plugin.business.BusinessLogic;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
 import hex.genmodel.easy.EasyPredictModelWrapper;
@@ -44,11 +45,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 		double startTimePost = System.nanoTime();
 		try {
 
-			DynamicClassLoader dynamicClassLoader = new DynamicClassLoader("com.ecosystem.plugin.business.BusinessLogic", true);
-			dynamicClassLoader.loadClass("com.ecosystem.plugin.business.BusinessLogic");
-
-			params = com.ecosystem.plugin.business.BusinessLogic.getValues(params);
-
+//			params.put("business_logic", "api");
+//			params.put("business_logic_params", "dowork");
+//			params.put("business_logic_action", "http://localhost:8091/business");
+//			params = BusinessLogic.getValues(params);
 
 			/** Setup JSON objects for specific prediction case */
 			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
