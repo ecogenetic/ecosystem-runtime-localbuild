@@ -137,7 +137,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 			}
 		}
 
-		RollingMaster rollingMaster = new RollingMaster();
+		RollingMaster rollingMaster = null;
 		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes();
 		RollingBehavior rollingBehavior = new RollingBehavior();
 		RollingNetwork rollingNetwork = new RollingNetwork();
@@ -153,13 +153,11 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 			System.out.println("Scheduler: " + count + " - " + RollingMaster.nowDate());
 
+			settings = new GlobalSettings();
+			if (rollingMaster == null && settings.getCorpora() != null)
+				rollingMaster = new RollingMaster();
+
 			if (rollingMaster != null) {
-
-				/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
-				settings = new GlobalSettings();
-
-				if (rollingMaster.mongoDynamicRecommender == null && settings.getCorpora() != null)
-					rollingMaster = new RollingMaster();
 
 				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
 
