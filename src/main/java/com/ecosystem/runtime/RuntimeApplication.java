@@ -153,21 +153,25 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 			System.out.println("Scheduler: " + count + " - " + RollingMaster.nowDate());
 
+			/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
 			settings = new GlobalSettings();
-			if (rollingMaster == null && settings.getCorpora() != null)
+			if (rollingMaster == null && settings.getCorpora() != null) {
 				rollingMaster = new RollingMaster();
+			}
 
 			if (rollingMaster != null) {
 
-				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
+				rollingMaster.settingsConnection.mongoClient.close();
+				rollingMaster = new RollingMaster();
 
+				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
 				if (!paramDoc.isEmpty()) {
 
 					String algo = paramDoc.getJSONObject("randomisation").getString("approach");
 
-					System.out.println("A===========================================================================================================");
+					System.out.println("A=====================================================================================================================");
 					System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingMaster.nowDate());
-					System.out.println("A===========================================================================================================");
+					System.out.println("A=====================================================================================================================");
 
 					/** PROCESS INDEXES ONCE PER STARTUP */
 					if (count == 0)
@@ -181,6 +185,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 						rollingBehavior.process(paramDoc);
 					if (algo.equals("Network"))
 						rollingNetwork.process(paramDoc);
+
 				}
 
 				count = count + 1;
@@ -189,5 +194,5 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		}
 
 	}
-	
+
 }
