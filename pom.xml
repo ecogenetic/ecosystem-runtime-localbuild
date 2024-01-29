@@ -57,7 +57,7 @@
         <dependency>
             <groupId>com.ecosystem</groupId>
             <artifactId>ecosystem-runtime</artifactId>
-            <version>0.9.4.1</version>
+            <version>0.9.4.2</version>
         </dependency>
 
     </dependencies>
