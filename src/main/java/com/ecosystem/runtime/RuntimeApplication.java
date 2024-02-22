@@ -34,6 +34,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 
+import javax.annotation.PostConstruct;
+
 /**
  * Core application definition
  *
@@ -68,7 +70,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 	public static void main(String[] args) {
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.1 Build: 2023-12.288");
+		System.out.println("Version: 0.9.4.2 Build: 2024-02.11");
 		System.out.println("============================================================");
 
 		SpringApplication.run(RuntimeApplication.class, args);
@@ -126,7 +128,6 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivity {
-		private String uuid = null;
 		private long count = 0;
 		GlobalSettings settings;
 		{
@@ -138,10 +139,16 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		}
 
 		RollingMaster rollingMaster = null;
-		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes();
-		RollingBehavior rollingBehavior = new RollingBehavior();
-		RollingNetwork rollingNetwork = new RollingNetwork();
+		RollingNaiveBayes rollingNaiveBayes;
+		RollingBehavior rollingBehavior;
+		RollingNetwork rollingNetwork;
 
+		@PostConstruct
+		private void init() {
+			rollingNaiveBayes = new RollingNaiveBayes();
+			rollingBehavior = new RollingBehavior();
+			rollingNetwork = new RollingNetwork();
+		}
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
 		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
@@ -151,18 +158,21 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
+			// TODO: Test if there are changes to ecosystem.properties and then call /refresh if it changed.
 			System.out.println("Scheduler: " + count + " - " + RollingMaster.nowDate());
 
 			/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
 			settings = new GlobalSettings();
 			if (rollingMaster == null && settings.getCorpora() != null) {
 				rollingMaster = new RollingMaster();
+				rollingMaster.init();
 			}
 
 			if (rollingMaster != null) {
 
 				rollingMaster.settingsConnection.mongoClient.close();
 				rollingMaster = new RollingMaster();
+				rollingMaster.init();
 
 				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
 				if (!paramDoc.isEmpty()) {
@@ -185,7 +195,6 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 						rollingBehavior.process(paramDoc);
 					if (algo.equals("Network"))
 						rollingNetwork.process(paramDoc);
-
 				}
 
 				count = count + 1;
@@ -194,5 +203,4 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		}
 
 	}
-
 }
