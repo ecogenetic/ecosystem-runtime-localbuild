@@ -165,14 +165,14 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 			settings = new GlobalSettings();
 			if (rollingMaster == null && settings.getCorpora() != null) {
 				rollingMaster = new RollingMaster();
-				rollingMaster.init();
+				// rollingMaster.init();
 			}
 
 			if (rollingMaster != null) {
 
 				rollingMaster.settingsConnection.mongoClient.close();
 				rollingMaster = new RollingMaster();
-				rollingMaster.init();
+				// rollingMaster.init();
 
 				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
 				if (!paramDoc.isEmpty()) {
