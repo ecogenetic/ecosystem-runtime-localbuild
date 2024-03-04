@@ -1,5 +1,6 @@
 package com.ecosystem.runtime;
 
+import com.ecosystem.plugin.business.BusinessLogic;
 import com.ecosystem.utils.JSONDecode;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -53,6 +54,10 @@ public class ProductMaster extends ProductMasterSuper {
 
     private static final Logger LOGGER = LogManager.getLogger(ProductMaster.class.getName());
 
+    public ProductMaster() {
+        super();
+    }
+
     /**
      * Primary Scoring Endpoint for Inference.
      * @param request
@@ -65,16 +70,38 @@ public class ProductMaster extends ProductMasterSuper {
                          @RequestBody String request) {
         LOGGER.info("/invocations API");
         JSONObject predictResult = new JSONObject();
+
         try {
             JSONObject inpObj = new JSONObject(request);
 
-            String params = (String) inpObj.get("params");
-            String campaign = inpObj.getString("campaign");
-            String subcampaign = inpObj.getString("subcampaign");
-            String channel = inpObj.getString("channel");
-            int numberoffers = inpObj.getInt("numberoffers");
-            String userid = inpObj.getString("userid");
-            String customer = inpObj.getString("customer");
+            /************ Validate and use defaults ***********/
+            String campaign = settings.getProjectDeploymentID();
+            if (inpObj.has("campaign"))
+                campaign = String.valueOf(inpObj.get("campaign"));
+
+            String subcampaign = campaign;
+            if (inpObj.has("campaign"))
+                subcampaign = String.valueOf(inpObj.get("subcampaign"));
+
+            String channel = "api";
+            if (inpObj.has("channel"))
+                channel = String.valueOf(inpObj.get("channel"));
+
+            int numberoffers = 1;
+            if (inpObj.has("numberoffers"))
+                numberoffers = Integer.parseInt(String.valueOf(inpObj.get("numberoffers")));
+
+            String userid = "api";
+            if (inpObj.has("userid"))
+                userid = String.valueOf(inpObj.get("userid"));
+
+            String params = "{}";
+            if (inpObj.has("params"))
+                params = (String) inpObj.get("params");
+
+            String customer = "none";
+            if (inpObj.has("customer"))
+                customer = String.valueOf(inpObj.get("customer"));
 
             JSONObject paramsParams = new JSONObject();
             try {
@@ -86,12 +113,11 @@ public class ProductMaster extends ProductMasterSuper {
                 return paramsParams.put("ErrorMessage", e).toString().intern();
             }
 
-            /* Setup values from input params that will be placed in */
+            /************ Setup values from input params that will be placed in **********/
             JSONObject param = new JSONObject();
             String uuid = generateUUID();
             /** param.put("headers", headers); */
             param.put("uuid", uuid);
-
             LOGGER.info("/invocations:UUID: " + uuid + " predictor: " + campaign);
 
             param.put("name", campaign);
@@ -102,11 +128,13 @@ public class ProductMaster extends ProductMasterSuper {
             param.put("subname", subcampaign);
             param.put("resultcount", numberoffers);
             param.put("userid", userid);
+            param.put("mojo", "1");
+
             /* this is needed to not cause a stack overflow as adding current value of json object */
             JSONObject inParam = new JSONObject(param.toString());
             param.put("api_params", inParam);
 
-            /** Set defaults for model and paramneters from database */
+            /************ Set defaults for model and paramneters from database ***********/
             param.put("in_params", paramsParams);
             if (paramsParams.has("input")) {
                 param.put("input", paramsParams.getJSONArray("input"));
@@ -118,9 +146,7 @@ public class ProductMaster extends ProductMasterSuper {
                 param = ValidateParams.getLookupFromParams(settings, param, customer);
             }
 
-            param.put("mojo", "1");
-
-            /* Obtain default epsilon from properties or obtain from input params */
+            /************ Obtain default epsilon from properties or obtain from input params ***********/
             if (!paramsParams.has("mab")) {
                 JSONObject mabParam = new JSONObject();
                 mabParam.put("class", "mabone");
@@ -131,7 +157,7 @@ public class ProductMaster extends ProductMasterSuper {
             }
 
             /**************** Primary prediction from EcosystemMaster.getPredictionResult **************/
-            predictResult = ecosystemMaster.getPredictionResult(param);
+            predictResult = ecosystemMaster.getPredictionResult(mongoClient, param);
             if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
             if (predictResult.has("ErrorMessage")) {
                 predictResult.put("error", 1);
@@ -141,6 +167,8 @@ public class ProductMaster extends ProductMasterSuper {
             String detail = "full";
             if (paramsParams.has("detail"))
                 detail = paramsParams.getString("detail");
+
+            /**************** Special prediction approaches: Spam **************/
             if (detail.contains("spam") || subcampaign.contains("spam")) {
                 JSONObject newResult = new JSONObject();
                 newResult.put("uuid", predictResult.getJSONArray("final_result").getJSONObject(0).getJSONObject("result_full").get("uuid"));
@@ -243,7 +271,7 @@ public class ProductMaster extends ProductMasterSuper {
 
         /** Primary prediction from EcosystemMaster.getPredictionResult */
         JSONObject predictResult = new JSONObject();
-        predictResult = ecosystemMaster.getPredictionResult(param);
+        predictResult = ecosystemMaster.getPredictionResult(mongoClient, param);
         if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
         if (predictResult.has("ErrorMessage")) {
             predictResult.put("error", 1);
@@ -333,7 +361,7 @@ public class ProductMaster extends ProductMasterSuper {
         LOGGER.info("/predictorResponsePreLoadKafKa params: " + valueJSON);
         try {
             JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
-            return ecosystemMaster.getPredictionResultToKafka(params);
+            return ecosystemMaster.getPredictionResultToKafka(mongoClient, params);
         } catch (Exception e) {
             LOGGER.error("PredictorMaster:predictorResponsePreLoadKafKa:E000: Param error: " + e);
             return "{\"ErrorMessage\": \"PredictorMaster:predictorResponsePreLoadKafKa:E000-1: Parameter error.\"}";
@@ -344,7 +372,7 @@ public class ProductMaster extends ProductMasterSuper {
     /**
      * Score model from pre-loaded mojo as set in the properties file
      *
-     * @param valueJSON Example: {'name':'predict1', 'mojo':'1','dbparam':true, lookup:{key:'customer_id',value:999999}} OR if parameter is not
+     * @param valueJSON Example: {'name':'predict1', 'mojo':'1','dbparam':true, lookup:{key:'customer_id',value:724578004}} OR if parameter is not
      *                  from database use: {'name':'predict1', 'mojo':'1..3','dbparam':false, 'input':['x','y'], 'value':['val_x','val_y']}
      *                  Use x:n to define the number of predictions to return as primary result, if the overall probability is not used.
      *                  Optional 'resultcount':3  if not present in parameter, then return one item
@@ -373,7 +401,7 @@ public class ProductMaster extends ProductMasterSuper {
         String uuid = UUID.randomUUID().toString();
         JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
         params.put("uuid", uuid);
-        return ecosystemMaster.getPredictionResult(params).toString();
+        return ecosystemMaster.getPredictionResult(mongoClient, params).toString();
     }
 
     /**
@@ -401,6 +429,35 @@ public class ProductMaster extends ProductMasterSuper {
 
         return "{\"message\": \"" + response + "\"}";
     }
+
+    /**
+     * Business logic service.
+     *
+     * @param params JSONObject with params
+     * @return Result
+     */
+    @Operation(description = "Access the business logic or other calculations." +
+            "", summary = "Business logic")
+    @RequestMapping(value = "/business", method = RequestMethod.POST)
+    public String processBusiness(@RequestHeader Map<String, String> headers,
+                                  @RequestBody String params) throws Exception {
+        LOGGER.info("/business POST API");
+        String response = "Success";
+
+        try {
+            JSONObject paramsObj = new JSONObject(params);
+
+            return BusinessLogic.getValues(paramsObj).toString();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            JSONObject error = new JSONObject().put("ErrorMessage", e.getMessage());
+            response = error.toString();
+            return "{\"ErrorMessage\": \"" + response + "\"}";
+        }
+
+    }
+
 
     /**
      * Update responses based on predictions.
@@ -521,7 +578,7 @@ public class ProductMaster extends ProductMasterSuper {
 
         /** Primary prediction from EcosystemMaster.getPredictionResult */
         JSONObject predictResult = new JSONObject();
-        predictResult = ecosystemMaster.getPredictionResult(param);
+        predictResult = ecosystemMaster.getPredictionResult(mongoClient, param);
         if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
         if (predictResult.has("ErrorMessage")) {
             predictResult.put("error", 1);
@@ -566,5 +623,4 @@ public class ProductMaster extends ProductMasterSuper {
             LOGGER.debug("/justforyou PUT API response: " + response);
         return response;
     }
-
 }

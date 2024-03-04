@@ -1,7 +1,9 @@
 package com.ecosystem.runtime;
 
+import com.ecosystem.data.mongodb.ConnectionFactory;
 import com.ecosystem.runtime.continuous.*;
 import com.ecosystem.utils.GlobalSettings;
+import com.mongodb.client.MongoClient;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
 import io.swagger.v3.oas.models.Components;
@@ -137,6 +139,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 				throw new RuntimeException(e);
 			}
 		}
+		MongoClient mongoClient = new ConnectionFactory().getMongoClient();
 
 		RollingMaster rollingMaster = null;
 		RollingNaiveBayes rollingNaiveBayes;
@@ -145,9 +148,9 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 		@PostConstruct
 		private void init() {
-			rollingNaiveBayes = new RollingNaiveBayes();
-			rollingBehavior = new RollingBehavior();
-			rollingNetwork = new RollingNetwork();
+			rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
+			rollingBehavior = new RollingBehavior(mongoClient);
+			rollingNetwork = new RollingNetwork(mongoClient);
 		}
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
@@ -165,17 +168,13 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 			settings = new GlobalSettings();
 			if (rollingMaster == null && settings.getCorpora() != null) {
 				rollingMaster = new RollingMaster();
-				// rollingMaster.init();
 			}
 
 			if (rollingMaster != null) {
 
-				rollingMaster.settingsConnection.mongoClient.close();
-				rollingMaster = new RollingMaster();
-				// rollingMaster.init();
-
 				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
 				if (!paramDoc.isEmpty()) {
+
 
 					String algo = paramDoc.getJSONObject("randomisation").getString("approach");
 
