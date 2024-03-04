@@ -157,7 +157,7 @@ public class ProductMaster extends ProductMasterSuper {
             }
 
             /**************** Primary prediction from EcosystemMaster.getPredictionResult **************/
-            predictResult = ecosystemMaster.getPredictionResult(mongoClient, param);
+            predictResult = ecosystemMaster.getPredictionResult(param);
             if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
             if (predictResult.has("ErrorMessage")) {
                 predictResult.put("error", 1);
