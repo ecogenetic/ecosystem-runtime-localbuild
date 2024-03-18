@@ -33,6 +33,7 @@ public class PostScoreNetwork extends PostScoreNetworkSuper {
      */
     public static JSONObject getPostPredict(JSONObject predictModelMojoResult, JSONObject params, CqlSession session, EasyPredictModelWrapper[] models) {
         double startTimePost = System.nanoTime();
+        String type = "";
         try {
             /* Setup JSON objects for specific prediction case */
             JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
@@ -77,6 +78,14 @@ public class PostScoreNetwork extends PostScoreNetworkSuper {
              */
             sortJsonArray = handlePreloadCorpora(params, featuresObj);
 
+            // Get network type to check for passthrough types
+            try {
+                type = params.getJSONObject("preloadCorpora").getJSONObject("network_config")
+                        .getJSONObject("network_config").getString("type");
+            } catch (Exception e) {
+                LOGGER.error("PostScoreNetwork:E002: Network type not found, check that type is assigned in config");
+            }
+
             predictModelMojoResult.put("final_result", sortJsonArray);
 
         } catch (Exception e) {
@@ -84,7 +93,10 @@ public class PostScoreNetwork extends PostScoreNetworkSuper {
         }
 
         /** Get top scores and test for explore/exploit randomization */
-        predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+        if (!type.equals("lookup_passthrough")) {
+            predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+        }
+        //predictModelMojoResult = getTopScores(params, predictModelMojoResult);
 
         double endTimePost = System.nanoTime();
         LOGGER.info("PostScoreNetwork:I001: execution time in ms: ".concat( String.valueOf((endTimePost - startTimePost) / 1000000) ));
