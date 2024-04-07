@@ -57,9 +57,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			JSONObject offerMatrixWithKey = new JSONObject();
 			boolean om = false;
 			if (params.has("offerMatrixWithKey")) {
-				LOGGER.info("No Offer Matrix configured, using generated defaults.");
 				offerMatrixWithKey = params.getJSONObject("offerMatrixWithKey");
 				om = true;
+			} else {
+				LOGGER.info("No Offer Matrix configured, using generated defaults.");
 			}
 
 			JSONObject work = params.getJSONObject("in_params");
