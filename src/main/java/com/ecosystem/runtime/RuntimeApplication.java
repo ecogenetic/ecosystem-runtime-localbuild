@@ -138,16 +138,10 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		MongoClient mongoClient = new ConnectionFactory().getMongoClient();
 
 		RollingMaster rollingMaster = null;
-		RollingNaiveBayes rollingNaiveBayes;
-		RollingBehavior rollingBehavior;
-		RollingNetwork rollingNetwork;
+		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
+		RollingBehavior rollingBehavior = new RollingBehavior(mongoClient);
+		RollingNetwork rollingNetwork = new RollingNetwork(mongoClient);
 
-		@PostConstruct
-		private void init() {
-			rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
-			rollingBehavior = new RollingBehavior(mongoClient);
-			rollingNetwork = new RollingNetwork(mongoClient);
-		}
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
 		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
