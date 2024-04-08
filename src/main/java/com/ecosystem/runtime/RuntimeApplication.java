@@ -63,13 +63,6 @@ import javax.annotation.PostConstruct;
 public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 	static GlobalSettings settings;
-	{
-		try {
-			settings = new GlobalSettings();
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
-	}
 	static JSONArray initialSettings = null;
 
 	public static void main(String[] args) {
@@ -77,6 +70,11 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		System.out.println("Version: 0.9.4.2 Build: 2024-02.11");
 		System.out.println("============================================================");
 
+		try {
+			settings = new GlobalSettings();
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
 		if (settings.getCorpora() != null)
 			initialSettings = settings.getCorpora();
 
