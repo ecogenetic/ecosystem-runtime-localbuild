@@ -67,7 +67,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 	public static void main(String[] args) {
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.2 Build: 2024-02.11");
+		System.out.println("Version: 0.9.4.2 Build: 2024-04.11");
 		System.out.println("============================================================");
 
 		try {
@@ -202,8 +202,6 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 							rollingBehavior.process(paramDoc);
 						if (algo.equals("Network"))
 							rollingNetwork.process(paramDoc);
-						// if (algo.equals("QLearning"))
-						// 	rollingQLearning.process(paramDoc);
 
 					}
 
