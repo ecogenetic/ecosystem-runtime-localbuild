@@ -9,15 +9,28 @@
     -->
 
     <!--    add to settings.xml in ~/.m2/
-    <settings>
-        <mirrors>
-          <mirror>
-              <id>ecosystem-repo</id>
-              <name>Maven Repository Manager running on customer.ecosystem.ai</name>
-              <url>http://maven.ecosystem.ai:50000/maven-repository</url>
-              <mirrorOf>ecosystem-repo</mirrorOf>
-          </mirror>
-        </mirrors>
+    <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                      http://maven.apache.org/xsd/settings-1.0.0.xsd">
+        <profiles>
+            <profile>
+                <id>default</id>
+                <activation>
+                    <activeByDefault>true</activeByDefault>
+                </activation>
+                <repositories>
+                    <repository>
+                        <id>ecosystem-repo</id>
+                        <url>http://maven.ecosystem.ai:50000/maven-repository</url>
+                        <snapshots>
+                            <updatePolicy>always</updatePolicy>
+                        </snapshots>
+                    </repository>
+                </repositories>
+            </profile>
+        </profiles>
+
     </settings>
     -->
 
