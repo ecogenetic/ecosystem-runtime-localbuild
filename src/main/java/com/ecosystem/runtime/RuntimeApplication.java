@@ -13,7 +13,6 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springdoc.core.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -62,21 +61,19 @@ import javax.annotation.PostConstruct;
 @EnableScheduling
 public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
-	static GlobalSettings settings;
-	static JSONArray initialSettings = null;
-
-	public static void main(String[] args) {
-		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.2 Build: 2024-04.11");
-		System.out.println("============================================================");
-
+	GlobalSettings settings;
+	{
 		try {
 			settings = new GlobalSettings();
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
-		if (settings.getCorpora() != null)
-			initialSettings = settings.getCorpora();
+	}
+
+	public static void main(String[] args) {
+		System.out.println("============================================================");
+		System.out.println("Version: 0.9.4.2 Build: 2024-02.11");
+		System.out.println("============================================================");
 
 		SpringApplication.run(RuntimeApplication.class, args);
 
@@ -134,14 +131,27 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 	@EnableAsync
 	class ScheduledActivity {
 		private long count = 0;
-
+		GlobalSettings settings;
+		{
+			try {
+				settings = new GlobalSettings();
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 		MongoClient mongoClient = new ConnectionFactory().getMongoClient();
 
 		RollingMaster rollingMaster = null;
-		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
-		RollingBehavior rollingBehavior = new RollingBehavior(mongoClient);
-		RollingNetwork rollingNetwork = new RollingNetwork(mongoClient);
+		RollingNaiveBayes rollingNaiveBayes;
+		RollingBehavior rollingBehavior;
+		RollingNetwork rollingNetwork;
 
+		@PostConstruct
+		private void init() {
+			rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
+			rollingBehavior = new RollingBehavior(mongoClient);
+			rollingNetwork = new RollingNetwork(mongoClient);
+		}
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
 		 * Set MONITORING_DELAY in seconds for processing, default is set to 10 mins.
@@ -151,57 +161,45 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
+			// TODO: Test if there are changes to ecosystem.properties and then call /refresh if it changed.
+			System.out.println("Scheduler: " + count + " - " + RollingMaster.nowDate());
+
+			/** PROCESS DYNAMIC CONFIGURATION: process current project_id only as defined in properties */
 			settings = new GlobalSettings();
-			if (settings.getCorpora() != null) {
-
-				if (initialSettings == null)
-					initialSettings = new JSONArray();
-
-				/** Changes in settings */
-				if (!initialSettings.toString().equals(settings.getCorpora().toString())) {
-					System.out.println("Settings changed, restarting...");
-					mongoClient.close();
-					mongoClient = new ConnectionFactory().getMongoClient();
-					rollingMaster = new RollingMaster(mongoClient);
-					rollingMaster.dynamicRecommender(mongoClient, settings);
-					initialSettings = settings.getCorpora();
-					return;
-				} else if (rollingMaster == null) {
-					rollingMaster = new RollingMaster(mongoClient);
-					rollingMaster.dynamicRecommender(mongoClient, settings);
-				}
-
-				System.out.println("Scheduler: " + count + " - " + RollingMaster.nowDate());
-
-				if (rollingMaster != null) {
-
-					JSONObject paramDoc = rollingMaster.checkCorpora(settings);
-					if (!paramDoc.isEmpty()) {
-
-						String algo = paramDoc.getJSONObject("randomisation").getString("approach");
-
-						System.out.println("A=====================================================================================================================");
-						System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingMaster.nowDate());
-						System.out.println("A=====================================================================================================================");
-
-						/** PROCESS INDEXES ONCE PER STARTUP */
-						if (count == 0)
-							rollingMaster.indexes(mongoClient);
-
-						if (algo.equals("binaryThompson"))
-							rollingMaster.process(paramDoc);
-						if (algo.equals("naiveBayes"))
-							rollingNaiveBayes.process(paramDoc);
-						if (algo.equals("behaviorAlgos"))
-							rollingBehavior.process(paramDoc);
-						if (algo.equals("Network"))
-							rollingNetwork.process(paramDoc);
-
-					}
-
-					count = count + 1;
-				}
+			if (rollingMaster == null && settings.getCorpora() != null) {
+				rollingMaster = new RollingMaster();
 			}
+
+			if (rollingMaster != null) {
+
+				JSONObject paramDoc = rollingMaster.checkCorpora(settings);
+				if (!paramDoc.isEmpty()) {
+
+
+					String algo = paramDoc.getJSONObject("randomisation").getString("approach");
+
+					System.out.println("A=====================================================================================================================");
+					System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingMaster.nowDate());
+					System.out.println("A=====================================================================================================================");
+
+					/** PROCESS INDEXES ONCE PER STARTUP */
+					if (count == 0)
+						rollingMaster.indexes();
+
+					if (algo.equals("binaryThompson"))
+						rollingMaster.process(paramDoc);
+					if (algo.equals("naiveBayes"))
+						rollingNaiveBayes.process(paramDoc);
+					if (algo.equals("behaviorAlgos"))
+						rollingBehavior.process(paramDoc);
+					if (algo.equals("Network"))
+						rollingNetwork.process(paramDoc);
+				}
+
+				count = count + 1;
+			}
+
 		}
+
 	}
 }
