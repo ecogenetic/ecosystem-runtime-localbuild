@@ -57,10 +57,9 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			JSONObject offerMatrixWithKey = new JSONObject();
 			boolean om = false;
 			if (params.has("offerMatrixWithKey")) {
+				LOGGER.info("No Offer Matrix configured, using generated defaults.");
 				offerMatrixWithKey = params.getJSONObject("offerMatrixWithKey");
 				om = true;
-			} else {
-				LOGGER.info("No Offer Matrix configured, using generated defaults.");
 			}
 
 			JSONObject work = params.getJSONObject("in_params");
@@ -97,12 +96,9 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			JSONArray finalOffers = new JSONArray();
 			int offerIndex = 0;
 			int explore;
-			int[] optionsSequence = generateOptionsSequence(options.length(), options.length());
 			String contextual_variable_one = String.valueOf(work.get("contextual_variable_one"));
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
-			for(int j : optionsSequence) {
-				if (j > params.getInt("resultcount")) break;
-
+			for (int j = 0; j < options.length(); j++) {
 				JSONObject option = options.getJSONObject(j);
 
 				/** Skip the item if offer matrix does not contain option */
