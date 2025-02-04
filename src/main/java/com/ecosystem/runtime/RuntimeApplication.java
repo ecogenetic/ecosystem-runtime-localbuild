@@ -72,7 +72,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 
 	public static void main(String[] args) {
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.2 Build: 2024-02.11");
+		System.out.println("Version: 0.9.2.1 Build: 2024-02.11");
 		System.out.println("============================================================");
 
 		SpringApplication.run(RuntimeApplication.class, args);
