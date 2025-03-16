@@ -9,6 +9,11 @@
     <remote-repository>
       <option name="id" value="ecosystem-repo" />
       <option name="name" value="ecosystem-repo" />
+      <option name="url" value="https://maven.ecosystem.ai" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="ecosystem-repo" />
+      <option name="name" value="ecosystem-repo" />
       <option name="url" value="scp://customer.ecosystem.ai/Users/developer/maven-repository" />
     </remote-repository>
     <remote-repository>

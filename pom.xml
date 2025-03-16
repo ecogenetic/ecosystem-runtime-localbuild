@@ -22,7 +22,7 @@
                 <repositories>
                     <repository>
                         <id>ecosystem-repo</id>
-                        <url>http://maven.ecosystem.ai:50000/maven-repository</url>
+                        <url>https://maven.ecosystem.ai</url>
                         <snapshots>
                             <updatePolicy>always</updatePolicy>
                         </snapshots>
@@ -39,13 +39,13 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.16</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <version>3.4.3</version>
+        <relativePath/>
     </parent>
 
     <groupId>com.ecosystem.local</groupId>
     <artifactId>ecosystem-runtime-localbuild</artifactId>
-    <version>0.2.1</version>
+    <version>0.9.0</version>
     <packaging>jar</packaging>
 
     <name>Ecosystem.Ai Client Pulse Responder (Runtime Real-time Scoring)</name>
@@ -55,24 +55,21 @@
         <start-class>com.ecosystem.runtime.EcosystemApp</start-class>
         <java.version>17</java.version>
         <docker.image.prefix>${user.name}</docker.image.prefix>
-        <kerberos.extension.version>1.0.1.RELEASE</kerberos.extension.version>
     </properties>
 
     <repositories>
         <repository>
             <id>ecosystem-repo</id>
-            <url>http://maven.ecosystem.ai:50000/maven-repository</url>
+            <url>https://maven.ecosystem.ai/</url>
         </repository>
     </repositories>
 
     <dependencies>
-
         <dependency>
             <groupId>com.ecosystem</groupId>
             <artifactId>ecosystem-runtime</artifactId>
-            <version>0.9.4.2</version>
+            <version>0.9.5.0</version>
         </dependency>
-
     </dependencies>
 
     <build>
@@ -81,10 +78,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.10.1</version>
+                <version>3.13.0</version>
                 <configuration>
-                    <source>11</source>
-                    <target>11</target>
+                    <source>17</source>
+                    <target>17</target>
                 </configuration>
             </plugin>
         </plugins>

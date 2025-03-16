@@ -4,11 +4,11 @@ import com.datastax.oss.driver.api.core.CqlSession;
 import org.json.JSONObject;
 
 /**
- * This is the same structure as DefaultPreScore
+ * This is the same structure as PrePredictCustomer
  */
-public class PrePredictCustomer {
+public class DefaultPreScore {
 
-    public PrePredictCustomer() {
+    public DefaultPreScore() {
     }
 
     /**
@@ -34,72 +34,7 @@ public class PrePredictCustomer {
 
 }
 
-/**
- * Example params: any key/value can be accessed and modified eg.
 
- {
-  "channel" : "app",
-  "uuid" : "e2ee2011-698a-4a9c-a1d0-1e61cdd5586c",
-  "userid" : "ecosystem",
-  "in_params" : { },
-  "dbparam" : true,
-  "mab" : {
-    "epsilon" : 0,
-    "class" : "mabone"
-  },
-  "mojo" : "1",
-  "UPDATE" : false,
-  "value" : [ "Grade12", "F", "English", 7, 2, 1, "Unmarried", 35, "Owner" ],
-  "duration_paramsdb" : 4.99625,
-  "resultcount" : 1,
-  "lookup" : {
-    "value" : 2401,
-    "key" : "customer"
-  },
-  "explore" : 0,
-  "explore_model" : 0,
-  "subname" : "model",
-  "whitelist" : { },
-  "featuresObj" : {
-    "education" : "Grade12",
-    "numberOfChildren" : 2,
-    "numberOfAddresses" : 1,
-    "gender" : "F",
-    "language" : "English",
-    "numberOfProducts" : 7,
-    "maritalStatus" : "Unmarried",
-    "age" : 35,
-    "proprtyOwnership" : "Owner"
-  },
-  "duration_whitelist" : 0.006667,
-  "api_params" : {
-    "resultcount" : 1,
-    "mojo" : "1",
-    "subname" : "model",
-    "name" : "spend_personality",
-    "subcampaign" : "model",
-    "channel" : "app",
-    "campaign" : "spend_personality",
-    "UPDATE" : false,
-    "uuid" : "e2ee2011-698a-4a9c-a1d0-1e61cdd5586c",
-    "userid" : "ecosystem",
-    "customer" : "2401"
-  },
-  "input" : [ "education", "gender", "language", "numberOfProducts", "numberOfChildren", "numberOfAddresses", "maritalStatus", "age", "proprtyOwnership" ],
-  "model_selector" : {
-    "model_selected" : [ 1 ]
-  },
-  "model_names" : {
-    "GBM_1_AutoML_1_20240323_121956.zip" : 0
-  },
-  "name" : "spend_personality",
-  "subcampaign" : "model",
-  "campaign" : "spend_personality",
-  "customer" : "2401",
-  "default_lookup" : false
-}
-
- */
 
 /**
  * Example params: any key/value can be accessed and modified eg.

@@ -3,9 +3,9 @@ package com.ecosystem.plugin.customer;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -14,7 +14,6 @@ import org.json.JSONObject;
  * Multiclass classifier trained on offer_name response column, offer matrix need to have all the offers loaded with offer_price.
  */
 public class PostScoreRecommenderOffers extends PostScoreSuper {
-
     private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommenderOffers.class.getName());
 
     public PostScoreRecommenderOffers() {
@@ -60,17 +59,20 @@ public class PostScoreRecommenderOffers extends PostScoreSuper {
                 offerMatrix = params.getJSONArray("offerMatrix");
 
             JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
-            String label = predictModelMojoResult.getJSONArray("label").getString(0);
-            JSONArray domains = predictModelMojoResult.getJSONArray("domains");
+            try {
+                String label = predictModelMojoResult.getJSONArray("label").getString(0).trim();
+                JSONArray domains = predictModelMojoResult.getJSONArray("domains");
+            } catch (Exception e) {
+                LOGGER.error("getPostPredict:E001b:Model could not be loaded, check deployment path: " + e);
+            }
 
-            int resultcount = (int) params.get("resultcount");
+            // int resultcount = (int) params.get("resultcount");
             int offerIndex = 0;
+            int explore = (int) params.get("explore");
 
             /** Select top items based on number of offers to present */
             for (int i = 0; i < offerMatrix.length(); i++) {
                 JSONObject singleOffer = offerMatrix.getJSONObject(i);
-
-                int explore = (int) params.get("explore");
                 JSONObject finalOffersObject = new JSONObject();
 
                 double offer_value = 1.0;
@@ -85,10 +87,20 @@ public class PostScoreRecommenderOffers extends PostScoreSuper {
                 if (singleOffer.has("cost"))
                     offer_cost = singleOffer.getDouble("cost");
 
-                double p = 0.0;
                 String offer_id = "";
-                if (domainsProbabilityObj.has(singleOffer.getString("offer_id"))) {
-                    offer_id = singleOffer.getString("offer_id");
+                if (domainsProbabilityObj.has(singleOffer.getString("offer_id").trim())) {
+                    offer_id = singleOffer.getString("offer_id").trim();
+                } else if (domainsProbabilityObj.has(singleOffer.getString("offer").trim())) {
+                    offer_id = singleOffer.getString("offer").trim();
+                } else if (domainsProbabilityObj.has(singleOffer.getString("offer_name").trim())) {
+                    offer_id = singleOffer.getString("offer_name").trim();
+                } else {
+                    LOGGER.error("offerRecommender:E002-1: " + params.get("uuid") + " - Not available (offer_id, offer, offer_name from probabilities): " + singleOffer.getString("offer_name"));
+                }
+
+                double p = 0.0;
+                if (domainsProbabilityObj.has(offer_id.trim())) {
+                    offer_id = singleOffer.getString("offer_id").trim();
                     p = domainsProbabilityObj.getDouble(offer_id);
                 } else {
                     LOGGER.error("offerRecommender:E002-1: " + params.get("uuid") + " - Not available: " + singleOffer.getString("offer_name"));

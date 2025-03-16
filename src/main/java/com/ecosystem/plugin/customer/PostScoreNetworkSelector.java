@@ -1,9 +1,9 @@
 package com.ecosystem.plugin.customer;
 
 import com.datastax.oss.driver.api.core.CqlSession;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
