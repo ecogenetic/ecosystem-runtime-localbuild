@@ -3,6 +3,7 @@ package com.ecosystem.runtime;
 import com.ecosystem.plugin.business.BusinessLogic;
 import com.ecosystem.utils.JSONDecode;
 
+import com.ecosystem.utils.JSONFlattener;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,7 +19,7 @@ import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-import javax.annotation.security.RolesAllowed;
+import jakarta.annotation.security.RolesAllowed;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.text.ParseException;
@@ -65,7 +66,7 @@ public class ProductMaster extends ProductMasterSuper {
      * @throws Exception
      */
     @Operation(summary = "Invocation endpoint: {\"campaign\":\"name\",\"subcampaign\":\"none\",\"customer\":\"1111\",\"channel\":\"app\",\"numberoffers\":1,\"userid\":\"test\",\"params\":\"{}\"}")
-    @RequestMapping(value = "/invocations", method = RequestMethod.POST)
+    @PostMapping("/invocations")
     public String invoke(@RequestHeader Map<String, String> headers,
                          @RequestBody String request) {
         LOGGER.info("/invocations API");
@@ -80,7 +81,7 @@ public class ProductMaster extends ProductMasterSuper {
                 campaign = String.valueOf(inpObj.get("campaign"));
 
             String subcampaign = campaign;
-            if (inpObj.has("campaign"))
+            if (inpObj.has("subcampaign"))
                 subcampaign = String.valueOf(inpObj.get("subcampaign"));
 
             String channel = "api";
@@ -118,6 +119,7 @@ public class ProductMaster extends ProductMasterSuper {
             String uuid = generateUUID();
             /** param.put("headers", headers); */
             param.put("uuid", uuid);
+            param.put("UPDATE", this.UPDATE);
             LOGGER.info("/invocations:UUID: " + uuid + " predictor: " + campaign);
 
             param.put("name", campaign);
@@ -157,7 +159,7 @@ public class ProductMaster extends ProductMasterSuper {
             }
 
             /**************** Primary prediction from EcosystemMaster.getPredictionResult **************/
-            predictResult = ecosystemMaster.getPredictionResult(param);
+            predictResult = ecosystemMaster.getPredictionResult(mongoClient, param);
             if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
             if (predictResult.has("ErrorMessage")) {
                 predictResult.put("error", 1);
@@ -179,13 +181,109 @@ public class ProductMaster extends ProductMasterSuper {
                 predictResult = newResult;
             }
 
+            /**************** Final step to decide if json needs to be flattened **************/
+            if (paramsParams.has("flatten_json") && Boolean.valueOf(String.valueOf(paramsParams.opt("flatten_json")))) {
+                predictResult = JSONFlattener.flatten(predictResult);
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
             predictResult.put("ErrorMessage", e.getMessage());
         }
+
+        this.UPDATE = setFinal(false, predictResult);
+
         return predictResult.toString();
     }
 
+    /**
+     * Update responses based on predictions.
+     *
+     * @param documentJSON documentJSON
+     * @return Result
+     */
+    @Operation(description = "Update response based on recommendation accepted (Async): " +
+            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
+            "", summary = "Update response based on predictions accepted")
+    @PostMapping("/response")
+    public String processResponse(@RequestHeader Map<String, String> headers,
+                                  @RequestBody String documentJSON) throws Exception {
+        LOGGER.info("/response POST API");
+        String response = "Success";
+
+        try {
+            ecosystemResponse.putResponseReturnDetailAsync(JSONDecode.decode(documentJSON));
+        } catch (Exception e) {
+            e.printStackTrace();
+            JSONObject error = new JSONObject().put("ErrorMessage", e.getMessage());
+            response = error.toString();
+        }
+
+        return "{\"message\": \"" + response + "\"}";
+    }
+
+    /**
+     * Business logic service.
+     *
+     * @param params JSONObject with params
+     * @return Result
+     */
+    @Operation(description = "Access the business logic or other calculations." +
+            "", summary = "Business logic")
+    @RequestMapping(value = "/business", method = RequestMethod.POST)
+    public String processBusiness(@RequestHeader Map<String, String> headers,
+                                  @RequestBody String params) throws Exception {
+        LOGGER.info("/business POST API");
+        String response = "Success";
+
+        try {
+            JSONObject paramsObj = new JSONObject(params);
+
+            this.UPDATE = setFinal(false, new JSONObject());
+            paramsObj.put("UPDATE", this.UPDATE);
+
+            return BusinessLogic.getValues(paramsObj).toString();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            JSONObject error = new JSONObject().put("ErrorMessage", e.getMessage());
+            response = error.toString();
+            return "{\"ErrorMessage\": \"" + response + "\"}";
+        }
+
+    }
+
+    /**
+     * Update responses based on predictions.
+     *
+     * @param documentJSON documentJSON
+     * @return Result
+     */
+    @Operation(description = "Update response based on recommendation accepted and return valid response: " +
+            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
+            "", summary = "Update response based on predictions accepted")
+    @RequestMapping(value = "/responseResult", method = RequestMethod.POST)
+    public String processResponseResult(@RequestHeader Map<String, String> headers,
+                                        @RequestBody String documentJSON) throws Exception {
+        LOGGER.info("/responseResult POST API");
+        String response = "Error";
+
+        try {
+            JSONObject responseObj = ecosystemResponse.putResponseReturnDetail(JSONDecode.decode(documentJSON));
+            if (responseObj.has("uuid"))
+                response = responseObj.getString("uuid");
+            else
+                response = "Error: UUID not found.";
+        } catch (Exception e) {
+            e.printStackTrace();
+            JSONObject error = new JSONObject().put("ErrorMessage", "Validate that uuid is available in log. " + e.getMessage());
+            response = error.toString();
+        }
+
+        return "{\"message\": \"" + response + "\"}";
+    }
+
+    /**************************************************************************************************************/
 
     /**
      * Prediction case is determined from properties file setup: mojo's, feature store, and other settings.
@@ -231,6 +329,7 @@ public class ProductMaster extends ProductMasterSuper {
         String uuid = generateUUID();
         param.put("headers", headers);
         param.put("uuid", uuid);
+        param.put("UPDATE", this.UPDATE);
 
         LOGGER.info("/invocations:UUID: " + uuid + " predictor: " + campaign);
 
@@ -278,6 +377,9 @@ public class ProductMaster extends ProductMasterSuper {
         }
 
         predictResult.remove("predict_result");
+
+        this.UPDATE = setFinal(false, predictResult);
+
         return predictResult.toString();
     }
 
@@ -305,6 +407,7 @@ public class ProductMaster extends ProductMasterSuper {
             JSONObject error = new JSONObject().put("ErrorMessage", "Validate that uuid is available in log. " + e.getMessage());
             response = error.toString();
         }
+
         return "{\"message\": \"" + response + "\"}";
     }
 
@@ -336,6 +439,7 @@ public class ProductMaster extends ProductMasterSuper {
             JSONObject error = new JSONObject().put("ErrorMessage", "Validate that uuid is available in log. " + e.getMessage());
             response = error.toString();
         }
+
         return "{\"message\": \"" + response + "\"}";
     }
 
@@ -361,6 +465,8 @@ public class ProductMaster extends ProductMasterSuper {
         LOGGER.info("/predictorResponsePreLoadKafKa params: " + valueJSON);
         try {
             JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
+            this.UPDATE = setFinal(false, params);
+            params.put("UPDATE", this.UPDATE);
             return ecosystemMaster.getPredictionResultToKafka(mongoClient, params);
         } catch (Exception e) {
             LOGGER.error("PredictorMaster:predictorResponsePreLoadKafKa:E000: Param error: " + e);
@@ -401,226 +507,9 @@ public class ProductMaster extends ProductMasterSuper {
         String uuid = UUID.randomUUID().toString();
         JSONObject params = new JSONObject(JSONDecode.decode(valueJSON));
         params.put("uuid", uuid);
+        params.put("UPDATE", this.UPDATE);
+        this.UPDATE = setFinal(false, params);
         return ecosystemMaster.getPredictionResult(mongoClient, params).toString();
     }
 
-    /**
-     * Update responses based on predictions.
-     *
-     * @param documentJSON documentJSON
-     * @return Result
-     */
-    @Operation(description = "Update response based on recommendation accepted (Async): " +
-            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
-            "", summary = "Update response based on predictions accepted")
-    @RequestMapping(value = "/response", method = RequestMethod.POST)
-    public String processResponse(@RequestHeader Map<String, String> headers,
-                                  @RequestBody String documentJSON) throws Exception {
-        LOGGER.info("/response POST API");
-        String response = "Success";
-
-        try {
-            ecosystemResponse.putResponseReturnDetailAsync(JSONDecode.decode(documentJSON));
-        } catch (Exception e) {
-            e.printStackTrace();
-            JSONObject error = new JSONObject().put("ErrorMessage", e.getMessage());
-            response = error.toString();
-        }
-
-        return "{\"message\": \"" + response + "\"}";
-    }
-
-    /**
-     * Business logic service.
-     *
-     * @param params JSONObject with params
-     * @return Result
-     */
-    @Operation(description = "Access the business logic or other calculations." +
-            "", summary = "Business logic")
-    @RequestMapping(value = "/business", method = RequestMethod.POST)
-    public String processBusiness(@RequestHeader Map<String, String> headers,
-                                  @RequestBody String params) throws Exception {
-        LOGGER.info("/business POST API");
-        String response = "Success";
-
-        try {
-            JSONObject paramsObj = new JSONObject(params);
-
-            return BusinessLogic.getValues(paramsObj).toString();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            JSONObject error = new JSONObject().put("ErrorMessage", e.getMessage());
-            response = error.toString();
-            return "{\"ErrorMessage\": \"" + response + "\"}";
-        }
-
-    }
-
-
-    /**
-     * Update responses based on predictions.
-     *
-     * @param documentJSON documentJSON
-     * @return Result
-     */
-    @Operation(description = "Update response based on recommendation accepted and return valid response: " +
-            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
-            "", summary = "Update response based on predictions accepted")
-    @RequestMapping(value = "/response_result", method = RequestMethod.POST)
-    public String processResponseResult(@RequestHeader Map<String, String> headers,
-                                        @RequestBody String documentJSON) throws Exception {
-        LOGGER.info("/response_result POST API");
-        String response = "Error";
-
-        try {
-            JSONObject responseObj = ecosystemResponse.putResponseReturnDetail(JSONDecode.decode(documentJSON));
-            if (responseObj.has("uuid"))
-                response = responseObj.getString("uuid");
-            else
-                response = "Error: UUID not found.";
-        } catch (Exception e) {
-            e.printStackTrace();
-            JSONObject error = new JSONObject().put("ErrorMessage", "Validate that uuid is available in log. " + e.getMessage());
-            response = error.toString();
-        }
-        return "{\"message\": \"" + response + "\"}";
-    }
-
-    /**************************************************************************************************************/
-
-
-    /**
-     * Prediction case is determined from properties file setup: mojo's, feature store, and other settings.
-     * <p>
-     * Balance enquire Case:
-     * From paramsParams - balance enquiry example: {msisdn:0828811817,in_balance:50,voice_balance:12,data_balance:400,n_offers:1}
-     * <p>
-     * Recharge Recommender Case:
-     * {'name':'layalty_recommender', 'mojo':'1','mab':{'class':'mabone', 'epsilon':0.4},'dbparam':true, lookup:{key:'msisdn',value:849999330}, param:{key:'in_recharge', value:100}, resultcount:2}
-     *
-     * @param campaign     campaign
-     * @param subcampaign  subcampaign
-     * @param customer     customer
-     * @param channel      channel
-     * @param numberoffers numberoffers
-     * @return Result
-     */
-    @Operation(summary = "Provide offers that form part of a campaign for a particular customer.")
-    @RequestMapping(value = "/justforyou",  method = RequestMethod.GET)
-    @ResponseStatus(HttpStatus.OK)
-    public String justforyou(  @RequestHeader Map<String, String> headers,
-                               @RequestParam(value = "msisdn") String customer,
-                               @RequestParam(value = "payment_method") String paymentMethod,
-                               @RequestParam(value = "campaign_id") String campaign,
-                               @RequestParam(value = "sub_campaign_id", required = false) String subcampaign,
-                               @RequestParam(value = "channel_name") String channel,
-                               @RequestParam(value = "number_of_offers", required = false) int numberoffers,
-                               @RequestParam(value = "user_id") String userid,
-                               @RequestParam(value = "params", required = false) String jsonParams) throws Exception {
-        LOGGER.info("/justforyou API");
-
-        JSONObject paramsParams = new JSONObject();
-
-        try {
-            String in_params = URLDecoder.decode(jsonParams);
-            if (in_params.startsWith("\"")) in_params = in_params.substring(1, in_params.length() - 1).replaceAll("\\\\", "");
-            paramsParams = new JSONObject(in_params);
-        } catch (org.json.JSONException e) {
-            LOGGER.info("/justforyou malformed params JSON input: " + jsonParams);
-            return paramsParams.put("ErrorMessage", e).toString();
-        }
-
-        JSONObject param = new JSONObject();
-        String uuid = generateUUID();
-        param.put("headers", headers);
-        param.put("uuid", uuid);
-
-        LOGGER.info("/justforyou:UUID: " + uuid + " predictor: " + campaign);
-
-        param.put("name", campaign);
-        param.put("customer", customer);
-        param.put("campaign_id", campaign);
-        param.put("subcampaign", subcampaign);
-        param.put("channel", channel);
-        param.put("subname", subcampaign);
-        param.put("resultcount", numberoffers);
-        param.put("userid", userid);
-        param.put("api_payment_method", paymentMethod);
-        /* use api_params key to store values in the params json object to allow for logging */
-        JSONObject inParam = new JSONObject(param.toString());
-        param.put("api_params", inParam);
-
-        /** Set defaults for model and paramneters from database */
-        param.put("in_params", paramsParams);
-        if (paramsParams.has("input")) {
-            param.put("input", paramsParams.getJSONArray("input"));
-            param.put("value", paramsParams.getJSONArray("value"));
-            param.put("lookup", new JSONObject().put("value", customer).put("key", "customer"));
-            param.put("dbparam", false);
-        } else {
-            param.put("dbparam", true);
-            param = ValidateParams.getLookupFromParams(settings, param, customer);
-        }
-
-        param.put("mojo", "1");
-
-        /** Obtain default epsilon from properties or obtain from input params */
-        if (!paramsParams.has("mab")) {
-            JSONObject mabParam = new JSONObject();
-            mabParam.put("class", "mabone");
-            mabParam.put("epsilon", settings.getEpsilon());
-            param.put("mab", mabParam);
-        } else {
-            param.put("mab", paramsParams.getJSONObject("mab"));
-        }
-
-        /** Primary prediction from EcosystemMaster.getPredictionResult */
-        JSONObject predictResult = new JSONObject();
-        predictResult = ecosystemMaster.getPredictionResult(mongoClient, param);
-        if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
-        if (predictResult.has("ErrorMessage")) {
-            predictResult.put("error", 1);
-        }
-
-        /* TODO MAKE THIS CONFIGURABLE IN THE WORKBENCH */
-        /* stage specific JSON result */
-        JSONObject result = new JSONObject();
-        result.put("cache", predictResult.get("cache"));
-        result.put("request_date", predictResult.get("datetime"));
-        result.put("explore",predictResult.get("explore"));
-        result.put("msisdn", customer);
-        result.put("campaign_id", campaign);
-        result.put("session_id", param.get("uuid"));
-        result.put("uuid", param.get("uuid"));
-        result.put("in_params", param.get("in_params"));
-        result.put("final_result", predictResult.getJSONArray("final_result"));
-        if (param.has("payment_method_code"))
-            result.put("payment_method",param.get("payment_method_code"));
-        else
-            result.put("payment_method",paymentMethod);
-
-        return result.toString().intern();
-    }
-
-    /**
-     * Confirm offers taken up by customers/msisdn.
-     *
-     * @param documentJSON documentJSON
-     * @return Result
-     */
-    @Operation(summary = "Update offers taken up by customers. Supported response format: " +
-            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_treatment_code\": \"OFFER_A\"}], \"channel_name\": \"app\", \"transaction_id\": \"uuid:0aa9140a-755e-48de-84a2-0a67451804f7\"}")
-    @RequestMapping(value = "/justforyou",  method = RequestMethod.PUT)
-    public String justforyou(@RequestHeader Map<String, String> headers,
-                             @RequestParam(name = "document") String documentJSON) throws IOException, ParseException {
-        LOGGER.info("/justforyou PUT API");
-        String response = ecosystemResponse.putResponse(JSONDecode.decode(documentJSON));
-        if (response == null)
-            LOGGER.error("/justforyou PUT API input document: " + documentJSON);
-        else
-            LOGGER.debug("/justforyou PUT API response: " + response);
-        return response;
-    }
 }

@@ -3,9 +3,9 @@ package com.ecosystem.plugin.customer;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -232,3 +232,139 @@ public class PostScoreBasic extends PostScoreSuper {
 	}
 
 }
+
+/**
+ * Example JSONObject: params:
+
+{
+  "channel" : "app",
+  "uuid" : "ee9a5288-6063-4a71-8a4a-5da16a5ec319",
+  "userid" : "ecosystem",
+  "in_params" : { },
+  "dbparam" : true,
+  "mab" : {
+    "epsilon" : 0,
+    "class" : "mabone"
+  },
+  "mojo" : "1",
+  "offerMatrixStatic" : [ ],
+  "UPDATE" : true,
+  "value" : [ "Grade12", "F", "English", 7, 2, 1, "Unmarried", 35, "Owner" ],
+  "duration_paramsdb" : 78.629958,
+  "resultcount" : 1,
+  "lookup" : {
+    "value" : 2401,
+    "key" : "customer"
+  },
+  "explore" : 0,
+  "explore_model" : 0,
+  "subname" : "model",
+  "whitelist" : { },
+  "featuresObj" : {
+    "education" : "Grade12",
+    "numberOfChildren" : 2,
+    "numberOfAddresses" : 1,
+    "gender" : "F",
+    "language" : "English",
+    "numberOfProducts" : 7,
+    "maritalStatus" : "Unmarried",
+    "age" : 35,
+    "proprtyOwnership" : "Owner"
+  },
+  "duration_whitelist" : 0.00475,
+  "api_params" : {
+    "resultcount" : 1,
+    "mojo" : "1",
+    "subname" : "model",
+    "name" : "spend_personality",
+    "subcampaign" : "model",
+    "channel" : "app",
+    "campaign" : "spend_personality",
+    "UPDATE" : true,
+    "uuid" : "ee9a5288-6063-4a71-8a4a-5da16a5ec319",
+    "userid" : "ecosystem",
+    "customer" : "2401"
+  },
+  "input" : [ "education", "gender", "language", "numberOfProducts", "numberOfChildren", "numberOfAddresses", "maritalStatus", "age", "proprtyOwnership" ],
+  "model_selector" : {
+    "model_selected" : [ 1 ]
+  },
+  "model_names" : {
+    "GBM_1_AutoML_1_20240323_121956.zip" : 0
+  },
+  "offerMatrixWithKey" : { },
+  "name" : "spend_personality",
+  "subcampaign" : "model",
+  "campaign" : "spend_personality",
+  "offerMatrix" : [ ],
+  "customer" : "2401",
+  "default_lookup" : false,
+  "preloadCorpora" : { }
+}
+
+ */
+
+
+/**
+ * Example JSONObject: predictModelMojoResult
+
+{
+  "features" : {
+    "education" : "Grade12",
+    "numberOfChildren" : 2,
+    "numberOfAddresses" : 1,
+    "gender" : "F",
+    "language" : "English",
+    "numberOfProducts" : 7,
+    "maritalStatus" : "Unmarried",
+    "age" : 35,
+    "proprtyOwnership" : "Owner"
+  },
+  "names" : [ [ "account_type", "trns_amt", "mcc_category", "personality_description" ] ],
+  "probability" : [ 0.9998964553366178 ],
+  "label_index" : [ 2 ],
+  "response" : [ "personality_description" ],
+  "domains" : [ [ "Enthusiastic", "Experiential", "Industrious", "Intentional", "NA", "Uncategorised" ] ],
+  "label" : [ "Industrious" ],
+  "modelType" : [ "hex.genmodel.algos.gbm.GbmMojoModel" ],
+  "type" : [ "multinomial" ],
+  "domainsProbabilityObj" : {
+    "Experiential" : 1.7523884343452256E-5,
+    "NA" : 2.7868894316116586E-5,
+    "Enthusiastic" : 2.5747886638038687E-5,
+    "Uncategorised" : 1.547580899026345E-8,
+    "Industrious" : 0.9998964553366178,
+    "Intentional" : 3.2388522275699294E-5
+  },
+  "probabilities" : [ [ 2.5747886638038687E-5, 1.7523884343452256E-5, 0.9998964553366178, 3.2388522275699294E-5, 2.7868894316116586E-5, 1.547580899026345E-8 ] ],
+  "featuresObj" : {
+    "education" : "Grade12",
+    "numberOfChildren" : 2,
+    "numberOfAddresses" : 1,
+    "gender" : "F",
+    "language" : "English",
+    "numberOfProducts" : 7,
+    "maritalStatus" : "Unmarried",
+    "age" : 35,
+    "proprtyOwnership" : "Owner"
+  }
+}
+
+ */
+
+/**
+ * Example JSONObject: featuresObj
+
+ {
+  "education" : "Grade12",
+  "numberOfChildren" : 2,
+  "numberOfAddresses" : 1,
+  "gender" : "F",
+  "language" : "English",
+  "numberOfProducts" : 7,
+  "maritalStatus" : "Unmarried",
+  "age" : 35,
+  "proprtyOwnership" : "Owner"
+}
+
+ */

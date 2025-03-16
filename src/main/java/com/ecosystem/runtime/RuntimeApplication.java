@@ -1,8 +1,11 @@
 package com.ecosystem.runtime;
 
 import com.ecosystem.data.mongodb.ConnectionFactory;
+import com.ecosystem.plugin.PluginLoader;
 import com.ecosystem.runtime.continuous.*;
+import com.ecosystem.utils.EnvironmentalVariables;
 import com.ecosystem.utils.GlobalSettings;
+import com.ecosystem.worker.license.ValidationService;
 import com.mongodb.client.MongoClient;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -13,19 +16,24 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.springdoc.core.GroupedOpenApi;
+import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.cassandra.CassandraReactiveDataAutoConfiguration;
+
 import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration;
+
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,11 +41,16 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.web.SecurityFilterChain;
 
-import javax.annotation.PostConstruct;
+import java.io.IOException;
+import java.util.*;
+
+import static com.ecosystem.worker.license.ValidationService.getEnvKey;
+import static com.ecosystem.worker.license.ValidationService.setEnvKey;
 
 /**
  * Core application definition
@@ -57,34 +70,68 @@ import javax.annotation.PostConstruct;
 		MongoAutoConfiguration.class,
 		MongoReactiveAutoConfiguration.class
 })
-@Configuration
 @EnableWebSecurity
-@EnableScheduling
-public class RuntimeApplication extends WebSecurityConfigurerAdapter {
+@Configuration
+public class RuntimeApplication {
+	private static ConfigurableApplicationContext context;
+
+	private static final Logger LOGGER = LogManager.getLogger(RuntimeApplication.class.getName());
+	public static String version;
+	public static String ip = null;
+	public static Set<String> whitelist = new HashSet<String>();
+	private static Boolean securityFlag = false;
+	private static String p = "8091";
+	private static String role = "ADMIN";
+	private static String classLoader = null;
+
+	static String MASTER_KEY; //  = "13a6a3f7-9196-4fbb-95eb-4891e508c76d";
 
 	static GlobalSettings settings;
 	static JSONArray initialSettings = null;
 
-	public static void main(String[] args) {
-		System.out.println("============================================================");
-		System.out.println("Version: 0.9.4.2 Build: 2024-04.11");
-		System.out.println("============================================================");
-
+	/**
+	 * Main Runtime application starting point
+	 *
+	 * @param args
+	 * @throws IOException
+	 */
+	public static void main(String[] args) throws Exception {
 		try {
 			settings = new GlobalSettings();
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
+
+		System.out.println("============================================================");
+		System.out.println("Version: 0.9.5.0 Build: 2025-03.16");
+		System.out.println("============================================================");
+
+		Calendar c = Calendar.getInstance();
+		TimeZone timezone = c.getTimeZone();
+		TimeZone.setDefault(null);
+		System.out.println("Local TimeZone is : " + timezone.getDisplayName());
+
+		String key = null;
+
+		String env_port = EnvironmentalVariables.getEnvKey("SERVER_PORT");
+		if (env_port != null) p = env_port;
+
 		if (settings.getCorpora() != null)
 			initialSettings = settings.getCorpora();
 
-		SpringApplication.run(RuntimeApplication.class, args);
+		context = SpringApplication.run(RuntimeApplication.class, args);
 
+		LOGGER.info("RuntimeApplication: ecosystem.Ai Client Pulse Responder Started on port number: " + p);
 		System.out.println("====================================================================================");
 		System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
 		System.out.println("====================================================================================");
+
 	}
 
+	/*****************************************************************************************************************
+	 * Swagger API documentation
+	 *****************************************************************************************************************/
+	/** https://springdoc.org/faq.html */
 	@Bean
 	public GroupedOpenApi publicApi() {
 		return GroupedOpenApi.builder()
@@ -101,12 +148,14 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 								.description("The ecosystem.Ai Client Pulse Responder Engine brings the power of real-time and near-time predictions to the enterprise. Implement your behavioral construct " +
 										"and core hypotheses through a configurable prediction platform. If you don't know how the model is going to behave, use our behavioral tracker" +
 										"to assist with selection and exploit the most successful options.")
-								.version("v0.9.4")
+								.version("v0.9.5")
 								.license(new License().name("ecosystem.Ai 1.0").url("https://ecosystem.ai")))
 				.externalDocs(new ExternalDocumentation()
 						.description("Learn Ecosystem")
-						.url("https://learn.ecosystem.ai")
+						.url("https://developer.ecosystem.ai")
 				).components(new Components()
+
+						//API Key, see: https://swagger.io/docs/specification/authentication/api-keys/
 						.addSecuritySchemes("apiKeyScheme", new SecurityScheme()
 								.type(SecurityScheme.Type.APIKEY)
 								.in(SecurityScheme.In.HEADER)
@@ -115,16 +164,40 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 				).addSecurityItem(new SecurityRequirement().addList("apiKeyScheme"));
 	}
 
+
 	/* This is to turn security off. Username and password is in the application.properties file */
-	@Override
-	protected void configure(HttpSecurity http) throws Exception {
-		System.out.println("Loading...");
-		http.csrf().disable()
-				.authorizeRequests()
-				.antMatchers(HttpMethod.GET, "/**").permitAll()
-				.antMatchers(HttpMethod.POST, "/**").permitAll()
-				.antMatchers(HttpMethod.PUT, "/**").permitAll();
-		System.out.println("Loaded...");
+	@Bean
+	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+		if (!securityFlag) {
+			// System.out.println("Loading...");
+			http.csrf(csrf -> csrf.disable())
+					.authorizeHttpRequests(auth -> auth
+							.requestMatchers(HttpMethod.GET, "/**").permitAll()
+							.requestMatchers(HttpMethod.POST, "/**").permitAll()
+							.requestMatchers(HttpMethod.PUT, "/**").permitAll()
+							.requestMatchers("/actuator/**").permitAll());
+		} else if (securityFlag) {
+			if (ip != null) {
+				System.out.println("Secure on: " + ip);
+				if (role.contains("USER")) {
+					http.csrf(csrf -> csrf.disable())
+							.authorizeHttpRequests(auth -> auth.anyRequest())
+							.httpBasic(Customizer.withDefaults());
+				} else if (role.contains("ADMIN")) {
+					http.csrf(csrf -> csrf.disable())
+							.authorizeHttpRequests(auth -> auth.anyRequest())
+							.httpBasic(Customizer.withDefaults());
+				}
+			} else {
+				System.out.println("Secure :)");
+				http.csrf(csrf -> csrf.disable())
+						.authorizeHttpRequests(auth -> auth
+								.requestMatchers("/**").authenticated()
+								.requestMatchers("/*").authenticated())
+						.httpBasic(Customizer.withDefaults());
+			}
+		}
+		return http.build();
 	}
 
 	/*****************************************************************************************************************
@@ -141,6 +214,7 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
 		RollingBehavior rollingBehavior = new RollingBehavior(mongoClient);
 		RollingNetwork rollingNetwork = new RollingNetwork(mongoClient);
+		// RollingQLearning rollingQLearning = new RollingQLearning();
 
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
@@ -196,6 +270,8 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 							rollingBehavior.process(paramDoc);
 						if (algo.equals("Network"))
 							rollingNetwork.process(paramDoc);
+						// if (algo.equals("QLearning"))
+						// 	rollingQLearning.process(paramDoc);
 
 					}
 
@@ -203,5 +279,9 @@ public class RuntimeApplication extends WebSecurityConfigurerAdapter {
 				}
 			}
 		}
+	}
+
+	public static ConfigurableApplicationContext getContext() {
+		return context;
 	}
 }

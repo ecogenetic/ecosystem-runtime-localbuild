@@ -4,9 +4,9 @@ import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -17,7 +17,6 @@ import java.io.IOException;
  * Use this class to perform generic scoring based on model and generic settings with label from scoring.
  */
 public class PostScoreRecommender {
-
 	private static final Logger LOGGER = LogManager.getLogger(PostScoreRecommender.class.getName());
 
 	static GlobalSettings settings;
@@ -67,6 +66,9 @@ public class PostScoreRecommender {
 			JSONObject work = params.getJSONObject("in_params");
 
 			JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
+			if (!predictModelMojoResult.has("label"))
+				LOGGER.error("getPostPredict:E001b: No label found in predictModelMojoResult. Check that the configuration is correct.");
+
 			String label = predictModelMojoResult.getJSONArray("label").getString(0);
 
 			JSONArray probabilities = new JSONArray();
