@@ -14,11 +14,6 @@
     <remote-repository>
       <option name="id" value="ecosystem-repo" />
       <option name="name" value="ecosystem-repo" />
-      <option name="url" value="scp://customer.ecosystem.ai/Users/developer/maven-repository" />
-    </remote-repository>
-    <remote-repository>
-      <option name="id" value="ecosystem-repo" />
-      <option name="name" value="ecosystem-repo" />
       <option name="url" value="http://vodacom.ecosystem.ai:50000/maven-repository" />
     </remote-repository>
     <remote-repository>
@@ -32,19 +27,34 @@
       <option name="url" value="https://repo1.maven.org/maven2" />
     </remote-repository>
     <remote-repository>
-      <option name="id" value="jboss.community" />
-      <option name="name" value="JBoss Community repository" />
-      <option name="url" value="https://repository.jboss.org/nexus/content/repositories/public/" />
-    </remote-repository>
-    <remote-repository>
       <option name="id" value="ecosystem-repo" />
       <option name="name" value="ecosystem-repo" />
       <option name="url" value="scp://customer.ecosystem.ai:8888/maven-repository" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="confluent" />
+      <option name="name" value="confluent" />
+      <option name="url" value="https://packages.confluent.io/maven/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="ecosystem-repo" />
+      <option name="name" value="ecosystem-repo" />
+      <option name="url" value="scp://customer.ecosystem.ai/Users/developer/maven-repository" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="jboss.community" />
+      <option name="name" value="JBoss Community repository" />
+      <option name="url" value="https://repository.jboss.org/nexus/content/repositories/public/" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="ecosystem-remote-repo" />
       <option name="name" value="ecosystem-remote-repo" />
       <option name="url" value="http://customer.ecosystem.ai/ecosystem-runtime-0.8.5.0.jar" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="ecosystem-repo" />
+      <option name="name" value="ecosystem-repo" />
+      <option name="url" value="https://maven.ecosystem.ai/" />
     </remote-repository>
     <remote-repository>
       <option name="id" value="ecosystem-repo" />
@@ -55,11 +65,6 @@
       <option name="id" value="internal.repo" />
       <option name="name" value="Temporary Staging Repository" />
       <option name="url" value="file://$PROJECT_DIR$/target/mvn-repo" />
-    </remote-repository>
-    <remote-repository>
-      <option name="id" value="confluent" />
-      <option name="name" value="confluent" />
-      <option name="url" value="https://packages.confluent.io/maven/" />
     </remote-repository>
   </component>
 </project>
