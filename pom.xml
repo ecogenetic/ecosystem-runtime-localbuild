@@ -52,7 +52,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <start-class>com.ecosystem.runtime.EcosystemApp</start-class>
+        <start-class>com.ecosystem.runtime.RuntimeApplication</start-class>
         <java.version>17</java.version>
         <docker.image.prefix>${user.name}</docker.image.prefix>
     </properties>
