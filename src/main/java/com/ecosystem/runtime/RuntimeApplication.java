@@ -84,7 +84,7 @@ public class RuntimeApplication {
 	private static String role = "ADMIN";
 	private static String classLoader = null;
 
-	static String MASTER_KEY; //  = "13a6a3f7-9196-4fbb-95eb-4891e508c76d";
+	static String MASTER_KEY;
 
 	static GlobalSettings settings;
 	static JSONArray initialSettings = null;
