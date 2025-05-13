@@ -84,8 +84,6 @@ public class RuntimeApplication {
 	private static String role = "ADMIN";
 	private static String classLoader = null;
 
-	static String MASTER_KEY; //  = "13a6a3f7-9196-4fbb-95eb-4891e508c76d";
-
 	static GlobalSettings settings;
 	static JSONArray initialSettings = null;
 
@@ -103,7 +101,7 @@ public class RuntimeApplication {
 		}
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.5.0 Build: 2025-03.16");
+		System.out.println("Version: 0.9.6.0 Build: 2025-05.15");
 		System.out.println("============================================================");
 
 		Calendar c = Calendar.getInstance();
@@ -148,7 +146,7 @@ public class RuntimeApplication {
 								.description("The ecosystem.Ai Client Pulse Responder Engine brings the power of real-time and near-time predictions to the enterprise. Implement your behavioral construct " +
 										"and core hypotheses through a configurable prediction platform. If you don't know how the model is going to behave, use our behavioral tracker" +
 										"to assist with selection and exploit the most successful options.")
-								.version("v0.9.5")
+								.version("v0.9.6")
 								.license(new License().name("ecosystem.Ai 1.0").url("https://ecosystem.ai")))
 				.externalDocs(new ExternalDocumentation()
 						.description("Learn Ecosystem")
@@ -210,11 +208,11 @@ public class RuntimeApplication {
 
 		MongoClient mongoClient = new ConnectionFactory().getMongoClient();
 
-		RollingMaster rollingMaster = null;
+		RollingEcosystemRewards rollingEcosystemRewards = null;
 		RollingNaiveBayes rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
 		RollingBehavior rollingBehavior = new RollingBehavior(mongoClient);
 		RollingNetwork rollingNetwork = new RollingNetwork(mongoClient);
-		// RollingQLearning rollingQLearning = new RollingQLearning();
+		RollingQLearning rollingQLearning = new RollingQLearning(mongoClient);
 
 		/**
 		 * PROCESS DYNAMIC CONFIGURATION: Continuous scheduling engine.
@@ -222,11 +220,13 @@ public class RuntimeApplication {
 		 */
 		@Async
 		@Qualifier(value = "taskExecutor")
+		// @Scheduled(cron = "*/20 * * * * *") // 240000 = 4 mins, 420000 = 7 mins
+		// @Scheduled(fixedDelayString = "${monitoring.delay}000", initialDelay = 10000)
 		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
 			settings = new GlobalSettings();
-			if (settings.getCorpora() != null) {
+			if (settings.getCorpora() != null && mongoClient != null) {
 
 				if (initialSettings == null)
 					initialSettings = new JSONArray();
@@ -234,45 +234,62 @@ public class RuntimeApplication {
 				/** Changes in settings */
 				if (!initialSettings.toString().equals(settings.getCorpora().toString())) {
 					System.out.println("Settings changed, restarting...");
-					mongoClient.close();
+					if (mongoClient != null)
+						mongoClient.close();
 					mongoClient = new ConnectionFactory().getMongoClient();
-					rollingMaster = new RollingMaster(mongoClient);
-					rollingMaster.dynamicRecommender(mongoClient, settings);
+					rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+					rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
 					initialSettings = settings.getCorpora();
 					return;
-				} else if (rollingMaster == null) {
-					rollingMaster = new RollingMaster(mongoClient);
-					rollingMaster.dynamicRecommender(mongoClient, settings);
+				} else if (rollingEcosystemRewards == null) {
+					rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+					rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
 				}
 
-				System.out.println("Scheduler: " + count + " - " + RollingMaster.nowDate());
+				System.out.println("Scheduler: " + count + " - " + RollingEcosystemRewards.nowDate());
 
-				if (rollingMaster != null) {
+				if (rollingEcosystemRewards != null) {
 
-					JSONObject paramDoc = rollingMaster.checkCorpora(settings);
+					JSONObject paramDoc = rollingEcosystemRewards.checkCorpora(settings);
 					if (!paramDoc.isEmpty()) {
 
-						String algo = paramDoc.getJSONObject("randomisation").getString("approach");
+						try {
+							String algo = paramDoc.getJSONObject("randomisation").getString("approach");
 
-						System.out.println("A=====================================================================================================================");
-						System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingMaster.nowDate());
-						System.out.println("A=====================================================================================================================");
+							System.out.println("A=====================================================================================================================");
+							System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingEcosystemRewards.nowDate());
+							System.out.println("A=====================================================================================================================");
 
-						/** PROCESS INDEXES ONCE PER STARTUP */
-						if (count == 0)
-							rollingMaster.indexes(mongoClient);
+							/** PROCESS INDEXES ONCE PER STARTUP */
+							if (count == 0)
+								rollingEcosystemRewards.indexes(mongoClient);
 
-						if (algo.equals("binaryThompson"))
-							rollingMaster.process(paramDoc);
-						if (algo.equals("naiveBayes"))
-							rollingNaiveBayes.process(paramDoc);
-						if (algo.equals("behaviorAlgos"))
-							rollingBehavior.process(paramDoc);
-						if (algo.equals("Network"))
-							rollingNetwork.process(paramDoc);
-						// if (algo.equals("QLearning"))
-						// 	rollingQLearning.process(paramDoc);
+							if (algo.equals("binaryThompson"))
+								rollingEcosystemRewards.process(paramDoc);
+							if (algo.equals("naiveBayes"))
+								rollingNaiveBayes.process(paramDoc);
+							if (algo.equals("behaviorAlgos"))
+								rollingBehavior.process(paramDoc);
+							if (algo.equals("Network"))
+								rollingNetwork.process(paramDoc);
+							if (algo.equals("QLearning"))
+								rollingQLearning.process(paramDoc);
 
+						} catch (Exception e) {
+
+							System.out.println("B=====================================================================================================================");
+							System.out.println("B===>>> Dynamic engine not processing. Updating all settings now...");
+							System.out.println("B=====================================================================================================================");
+
+							System.out.println("Settings changed, restarting...");
+							if (mongoClient != null)
+								mongoClient.close();
+							mongoClient = new ConnectionFactory().getMongoClient();
+							rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+							rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+							initialSettings = settings.getCorpora();
+
+						}
 					}
 
 					count = count + 1;
@@ -280,6 +297,7 @@ public class RuntimeApplication {
 			}
 		}
 	}
+
 
 	public static ConfigurableApplicationContext getContext() {
 		return context;

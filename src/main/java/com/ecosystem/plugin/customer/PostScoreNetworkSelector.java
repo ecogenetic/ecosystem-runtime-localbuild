@@ -42,7 +42,7 @@ public class PostScoreNetworkSelector extends PostScoreNetworkSuper {
 
             /** Execute network based on settings in corpora */
             /**
-             * Configure a network of client pulse responders bu changing configuration based on lookup, scoring and
+             * Configure a network of client pulse responders by changing configuration based on lookup, scoring and
              * other criteria. Ensure that the lookup settings coordinate and that default have been set or removed.
              * Example, if there's a customer, or other settings in the __network collection, it will use those.
              * If you want customer to go straight through, then remove that default.

@@ -6,7 +6,7 @@ import org.json.JSONObject;
 /**
  * This is the same structure as PrePredictCustomer
  */
-public class DefaultPreScore {
+public class DefaultPreScore extends PreScoreSuper {
 
     public DefaultPreScore() {
     }
