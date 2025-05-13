@@ -28,7 +28,7 @@ import java.util.UUID;
 
 import static com.ecosystem.utils.GenerateUUID.generateUUID;
 
-@CrossOrigin
+@CrossOrigin(origins = "*")
 @RolesAllowed({"ADMIN", "USER"})
 @RestController()
 @SecurityScheme(type = SecuritySchemeType.APIKEY)
@@ -41,8 +41,10 @@ import static com.ecosystem.utils.GenerateUUID.generateUUID;
         @ApiResponse(responseCode = "404", description = "Error",
                 content = @Content) })
 @Tag(name = "Predictors", description = "Review model domain details, refresh model parameter loading and perform predictions. " +
-        "There are two primary approaches to invoking a prediction for scoring via a model namely; Invoke model and return a JSON response that can be used in any application," +
-        " invoke model and deliver result onto a KAFKA topic of your choosing. Model can also be tested by dynamically loading a MOJO, mostly used for testing purposes." +
+        "There are two primary approaches to invoking a prediction for scoring via a model namely; " +
+        "Invoke model and return a JSON response that can be used in any application," +
+        " invoke model and deliver result onto a KAFKA topic of your choosing. " +
+        " Model can also be tested by dynamically loading a MOJO, mostly used for testing purposes." +
         "The predictor parameters are broken into two types namely, requiring all parameters via API or requiring a lookup key via API and extracting parameters from a data source." +
         "Use this format for input params: \n " +
         "{'name':'predict1', 'mojo':'model_mojo.zip','dbparam':false,'input': ['x','y'],'value': ['val_x', 'val_y']}" +
@@ -65,10 +67,16 @@ public class ProductMaster extends ProductMasterSuper {
      * @return
      * @throws Exception
      */
-    @Operation(summary = "Invocation endpoint: {\"campaign\":\"name\",\"subcampaign\":\"none\",\"customer\":\"1111\",\"channel\":\"app\",\"numberoffers\":1,\"userid\":\"test\",\"params\":\"{}\"}")
+    @Operation(summary = "If no parameters are provided then the current use-case name is used and user is none. "
+            +" Invocation payload: {\"campaign\":\"name\",\"subcampaign\":\"none\"," +
+            "\"customer\":\"1111\",\"channel\":\"app\",\"numberoffers\":1,\"userid\":\"test\",\"params\":\"{}\"} " +
+            "Note that the params will be different when a dynamic interaction model is used."
+    )
     @PostMapping("/invocations")
-    public String invoke(@RequestHeader Map<String, String> headers,
-                         @RequestBody String request) {
+    public String invoke(
+            @RequestHeader Map<String, String> headers,
+            @RequestBody String request
+    ) {
         LOGGER.info("/invocations API");
         JSONObject predictResult = new JSONObject();
 
@@ -203,8 +211,8 @@ public class ProductMaster extends ProductMasterSuper {
      * @return Result
      */
     @Operation(description = "Update response based on recommendation accepted (Async): " +
-            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
-            "", summary = "Update response based on predictions accepted")
+            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}",
+            summary = "Update response based on predictions accepted")
     @PostMapping("/response")
     public String processResponse(@RequestHeader Map<String, String> headers,
                                   @RequestBody String documentJSON) throws Exception {
@@ -228,8 +236,8 @@ public class ProductMaster extends ProductMasterSuper {
      * @param params JSONObject with params
      * @return Result
      */
-    @Operation(description = "Access the business logic or other calculations." +
-            "", summary = "Business logic")
+    @Operation(description = "Access the business logic or other calculations.",
+            summary = "Business logic")
     @RequestMapping(value = "/business", method = RequestMethod.POST)
     public String processBusiness(@RequestHeader Map<String, String> headers,
                                   @RequestBody String params) throws Exception {
@@ -260,8 +268,8 @@ public class ProductMaster extends ProductMasterSuper {
      * @return Result
      */
     @Operation(description = "Update response based on recommendation accepted and return valid response: " +
-            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
-            "", summary = "Update response based on predictions accepted")
+            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}",
+            summary = "Update response based on predictions accepted")
     @RequestMapping(value = "/responseResult", method = RequestMethod.POST)
     public String processResponseResult(@RequestHeader Map<String, String> headers,
                                         @RequestBody String documentJSON) throws Exception {

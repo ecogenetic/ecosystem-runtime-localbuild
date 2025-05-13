@@ -37,14 +37,15 @@ public class PostScoreNetwork extends PostScoreNetworkSuper {
         try {
             /* Setup JSON objects for specific prediction case */
             JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
+            System.out.println("\n>>> " + featuresObj.toString());
 
             /** Final offer list based on score */
             JSONArray sortJsonArray = new JSONArray();
 
             /** Execute network based on settings in corpora */
             /**
-             * Configure a network of client pulse responders bu changing configuration based on lookup, scoring and
-             * other criteria. Ensure that the lookup settings coordinate and that default have been set or removed.
+             * Configure a network of client pulse responders by changing configuration based on lookup, scoring and
+             * other criteria. Ensure that the lookup settings coordinate and that defaults have been set or removed.
              * Example, if there's a customer, or other settings in the __network collection, it will use those.
              * If you want customer to go straight through, then remove that default.
              *
@@ -60,6 +61,7 @@ public class PostScoreNetwork extends PostScoreNetworkSuper {
              * {
              *   "switch_key": "marital",
              *   "name": "network_config"
+             *   "type": "model_selector",
              * }
              *
              *
@@ -76,16 +78,8 @@ public class PostScoreNetwork extends PostScoreNetworkSuper {
              *   "customer": "281db655-d667-4671-a715-8402c29d7d11"
              * }
              */
+
             sortJsonArray = handlePreloadCorpora(params, featuresObj);
-
-            // Get network type to check for passthrough types
-            try {
-                type = params.getJSONObject("preloadCorpora").getJSONObject("network_config")
-                        .getJSONObject("network_config").getString("type");
-            } catch (Exception e) {
-                LOGGER.error("PostScoreNetwork:E002: Network type not found, check that type is assigned in config");
-            }
-
             predictModelMojoResult.put("final_result", sortJsonArray);
 
         } catch (Exception e) {
@@ -93,6 +87,7 @@ public class PostScoreNetwork extends PostScoreNetworkSuper {
         }
 
         /** Get top scores and test for explore/exploit randomization */
+        type = getType(params);
         if (!type.equals("lookup_passthrough")) {
             predictModelMojoResult = getTopScores(params, predictModelMojoResult);
         }

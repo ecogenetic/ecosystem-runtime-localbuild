@@ -66,7 +66,6 @@ public class PostScoreRecommenderOffers extends PostScoreSuper {
                 LOGGER.error("getPostPredict:E001b:Model could not be loaded, check deployment path: " + e);
             }
 
-            // int resultcount = (int) params.get("resultcount");
             int offerIndex = 0;
             int explore = (int) params.get("explore");
 
@@ -88,12 +87,13 @@ public class PostScoreRecommenderOffers extends PostScoreSuper {
                     offer_cost = singleOffer.getDouble("cost");
 
                 String offer_id = "";
+                String offer_name = "";
                 if (domainsProbabilityObj.has(singleOffer.getString("offer_id").trim())) {
                     offer_id = singleOffer.getString("offer_id").trim();
                 } else if (domainsProbabilityObj.has(singleOffer.getString("offer").trim())) {
                     offer_id = singleOffer.getString("offer").trim();
                 } else if (domainsProbabilityObj.has(singleOffer.getString("offer_name").trim())) {
-                    offer_id = singleOffer.getString("offer_name").trim();
+                    offer_name = singleOffer.getString("offer_name").trim();
                 } else {
                     LOGGER.error("offerRecommender:E002-1: " + params.get("uuid") + " - Not available (offer_id, offer, offer_name from probabilities): " + singleOffer.getString("offer_name"));
                 }
@@ -110,8 +110,8 @@ public class PostScoreRecommenderOffers extends PostScoreSuper {
                 modified_offer_score = p * ((double) offer_value - offer_cost);
 
                 finalOffersObject.put("offer", offer_id);
-                finalOffersObject.put("offer_name", singleOffer.get("offer_name"));
-                finalOffersObject.put("offer_name_desc", singleOffer.get("offer_name") + " - " + i);
+                finalOffersObject.put("offer_name", offer_name);
+                finalOffersObject.put("offer_name_desc", offer_name + " - " + i);
 
                 /** process final */
                 // double p = domainsProbabilityObj.getDouble(label);

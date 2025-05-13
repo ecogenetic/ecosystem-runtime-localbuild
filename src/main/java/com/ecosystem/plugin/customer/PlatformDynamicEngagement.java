@@ -1,13 +1,11 @@
 package com.ecosystem.plugin.customer;
 
 import com.datastax.oss.driver.api.core.CqlSession;
-import com.ecosystem.plugin.DynamicClassLoader;
-import com.ecosystem.plugin.business.BusinessLogic;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -96,7 +94,8 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 
 			JSONArray finalOffers = new JSONArray();
 			int offerIndex = 0;
-			int explore;
+			int explore = 0;
+			explore = params.getInt("explore");
 			int[] optionsSequence = generateOptionsSequence(options.length(), options.length());
 			String contextual_variable_one = String.valueOf(work.get("contextual_variable_one"));
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
@@ -179,14 +178,18 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					/* r IS THE RANDOMIZED SCORE VALUE */
 					double p = 0.0;
 					double arm_reward = 0.001;
+					double learning_reward = 1.0;
 
-					explore = 0;
 					if (option.has("arm_reward")) {
 						p = (double) option.get("arm_reward");
 					} else {
 						p = arm_reward;
 					}
 					arm_reward = p;
+
+					if (option.has("learning_reward")) {
+						learning_reward = (double) option.get("learning_reward");
+					}
 
 					/** Check if values are correct */
 					if (p != p) p = 0.0;
@@ -249,6 +252,7 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					finalOffersObject.put("explore", explore);
 					finalOffersObject.put("uuid", params.get("uuid"));
 					finalOffersObject.put("arm_reward", arm_reward);
+					finalOffersObject.put("learning_reward", learning_reward);
 
 					/* Debugging variables */
 					if (!option.has("expected_takeup"))
