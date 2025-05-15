@@ -225,8 +225,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 
 					finalOffersObject.put("offer", offer);
 					finalOffersObject.put("offer_name", offer);
-					finalOffersObject.put("offer_name_desc", option.getString("option"));
-
+					if (!option.has("option"))
+						finalOffersObject.put("offer_name_desc", offer);
+					else
+						finalOffersObject.put("offer_name_desc", option.getString("option"));
 					/* process final */
 					finalOffersObject.put("score", p);
 					finalOffersObject.put("final_score", p);
@@ -248,7 +250,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 
 					finalOffersObject.put("alpha", alpha);
 					finalOffersObject.put("beta", beta);
-					finalOffersObject.put("weighting", (double) DataTypeConversions.getDoubleFromIntLong(option.get("weighting")));
+					if (!option.has("weighting"))
+						finalOffersObject.put("weighting", -1.0);
+					else
+						finalOffersObject.put("weighting", (double) DataTypeConversions.getDoubleFromIntLong(option.get("weighting")));
 					finalOffersObject.put("explore", explore);
 					finalOffersObject.put("uuid", params.get("uuid"));
 					finalOffersObject.put("arm_reward", arm_reward);
