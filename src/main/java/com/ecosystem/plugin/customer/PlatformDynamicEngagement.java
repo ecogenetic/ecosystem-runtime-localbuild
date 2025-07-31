@@ -92,6 +92,26 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			}
 			/***************************************************************************************************/
 
+			/***************************************************************************************************/
+			/** Test if offer eligibility is specified in in_params */
+			boolean check_eligibility_list = false;
+			JSONObject eligibility_list = new JSONObject();
+			if (work.has("eligible_offers")) {
+				LOGGER.info("PlatformDynamicEngagement:I002: eligible_offers item found in params, constructing list of eligible offers.");
+				try {
+					eligibility_list = work.getJSONObject("eligible_offers");
+					if (!eligibility_list.isEmpty()) {
+						check_eligibility_list = true;
+						LOGGER.info("PlatformDynamicEngagement:I002: applying eligibility list: "+eligibility_list.toString());
+					} else {
+						LOGGER.warn("PlatformDynamicEngagement:W001: eligibility list is empty, skipping eligible_offers check");
+					}
+				} catch (Exception e) {
+					LOGGER.warn("PlatformDynamicEngagement:I002: eligible_offers found but error occurred but error extracting eligibility list. Skipping eligible_offers check.");
+				}
+			}
+			/***************************************************************************************************/
+
 			JSONArray finalOffers = new JSONArray();
 			int offerIndex = 0;
 			int explore = 0;
@@ -159,14 +179,22 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 				}
 
 
-				String contextual_variable_one_Option = "";
-				if (option.has("contextual_variable_one") && !contextual_variable_one.equals(""))
-					contextual_variable_one_Option = String.valueOf(option.get("contextual_variable_one"));
-				String contextual_variable_two_Option = "";
-				if (option.has("contextual_variable_two") && !contextual_variable_two.equals(""))
-					contextual_variable_two_Option = String.valueOf(option.get("contextual_variable_two"));
+//				String contextual_variable_one_Option = "";
+//				if (option.has("contextual_variable_one") && !contextual_variable_one.equals(""))
+//					contextual_variable_one_Option = String.valueOf(option.get("contextual_variable_one"));
+//				String contextual_variable_two_Option = "";
+//				if (option.has("contextual_variable_two") && !contextual_variable_two.equals(""))
+//					contextual_variable_two_Option = String.valueOf(option.get("contextual_variable_two"));
 
-				if (contextual_variable_one_Option.equals(contextual_variable_one) && contextual_variable_two_Option.equals(contextual_variable_two)) {
+				/* If eligibility list has been extracted from in_params, check that offer is eligible*/
+				boolean eligibility_from_params = true;
+				if (check_eligibility_list) {
+					if (!eligibility_list.has(offer)) {
+						eligibility_from_params = false;
+					}
+				}
+
+				if (compareContextualVariableValues(option, work) & eligibility_from_params) {
 
 					double alpha = (double) DataTypeConversions.getDoubleFromIntLong(option.get("alpha"));
 					double beta = (double) DataTypeConversions.getDoubleFromIntLong(option.get("beta"));
@@ -225,7 +253,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 
 					finalOffersObject.put("offer", offer);
 					finalOffersObject.put("offer_name", offer);
-					finalOffersObject.put("offer_name_desc", option.getString("option"));
+					if (!option.has("option"))
+						finalOffersObject.put("offer_name_desc", offer);
+					else
+						finalOffersObject.put("offer_name_desc", option.getString("option"));
 
 					/* process final */
 					finalOffersObject.put("score", p);
@@ -237,18 +268,21 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 
 					finalOffersObject.put("p", p);
 					if (option.has("contextual_variable_one"))
-						finalOffersObject.put("contextual_variable_one", option.getString("contextual_variable_one"));
+						finalOffersObject.put("contextual_variable_one", contextual_variable_one);
 					else
 						finalOffersObject.put("contextual_variable_one", "");
 
 					if (option.has("contextual_variable_two"))
-						finalOffersObject.put("contextual_variable_two", option.getString("contextual_variable_two"));
+						finalOffersObject.put("contextual_variable_two", contextual_variable_two);
 					else
 						finalOffersObject.put("contextual_variable_two", "");
 
 					finalOffersObject.put("alpha", alpha);
 					finalOffersObject.put("beta", beta);
-					finalOffersObject.put("weighting", (double) DataTypeConversions.getDoubleFromIntLong(option.get("weighting")));
+					if (!option.has("weighting"))
+						finalOffersObject.put("weighting", -1.0);
+					else
+						finalOffersObject.put("weighting", (double) DataTypeConversions.getDoubleFromIntLong(option.get("weighting")));
 					finalOffersObject.put("explore", explore);
 					finalOffersObject.put("uuid", params.get("uuid"));
 					finalOffersObject.put("arm_reward", arm_reward);

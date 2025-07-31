@@ -101,7 +101,7 @@ public class RuntimeApplication {
 		}
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.6.0 Build: 2025-05.15");
+		System.out.println("Version: 0.9.6.1 Build: 2025-07.32");
 		System.out.println("============================================================");
 
 		Calendar c = Calendar.getInstance();
