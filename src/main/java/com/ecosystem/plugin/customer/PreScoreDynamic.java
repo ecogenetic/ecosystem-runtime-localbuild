@@ -38,13 +38,14 @@ public class PreScoreDynamic extends PreScoreSuper {
 
             /** Get dynamic properties and add virtual variables to the feature store. */
             params = getDynamicSettings(mongoClient, params);
-            params = getVirtualVariables(params);
+            /* Virtual variables are loaded from the properties file */
+            //params = getVirtualVariables(params);
 
             /** Pupulate contextual variables by default based on settings. */
             params = getPrepopulateContextualVariables(params);
 
         } catch (Exception e) {
-            LOGGER.error("PreScoreDynamic:E001:UUID: " + params.get("uuid") + " Dynamic parameters failed: " + params.toString());
+            LOGGER.error("PreScoreDynamic:E001:UUID: " + params.get("uuid") + " Dynamic parameters failed: params: " + params.toString() + "message: " + e.getMessage());
             e.printStackTrace();
         }
 

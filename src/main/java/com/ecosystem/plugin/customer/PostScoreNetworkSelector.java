@@ -86,7 +86,8 @@ public class PostScoreNetworkSelector extends PostScoreNetworkSuper {
              *   "customer": "281db655-d667-4671-a715-8402c29d7d11",
              * }
              */
-            sortJsonArray = handlePreloadCorpora(params, featuresObj);
+            params = handlePreloadCorpora(params, featuresObj);
+            sortJsonArray = params.getJSONArray("sortJsonArray");
 
             predictModelMojoResult.put("final_result", sortJsonArray);
 
