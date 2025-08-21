@@ -1,11 +1,9 @@
 package com.ecosystem.runtime;
 
 import com.ecosystem.data.mongodb.ConnectionFactory;
-import com.ecosystem.plugin.PluginLoader;
 import com.ecosystem.runtime.continuous.*;
 import com.ecosystem.utils.EnvironmentalVariables;
 import com.ecosystem.utils.GlobalSettings;
-import com.ecosystem.worker.license.ValidationService;
 import com.mongodb.client.MongoClient;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -225,74 +223,94 @@ public class RuntimeApplication {
 		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
-			settings = new GlobalSettings();
-			if (settings.getCorpora() != null && mongoClient != null) {
+            settings = new GlobalSettings();
+            if (settings.getCorpora() != null && mongoClient != null) {
 
-				if (initialSettings == null)
-					initialSettings = new JSONArray();
+                if (initialSettings == null)
+                    initialSettings = new JSONArray();
 
-				/** Changes in settings */
-				if (!initialSettings.toString().equals(settings.getCorpora().toString())) {
-					System.out.println("Settings changed, restarting...");
-					if (mongoClient != null)
-						mongoClient.close();
-					mongoClient = new ConnectionFactory().getMongoClient();
-					rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-					rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-					initialSettings = settings.getCorpora();
-					return;
-				} else if (rollingEcosystemRewards == null) {
-					rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-					rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-				}
+                /** Changes in settings */
+                if (!initialSettings.toString().equals(settings.getCorpora().toString())) {
+                    System.out.println("Settings changed, restarting...");
+                    if (mongoClient != null)
+                        mongoClient.close();
+                    mongoClient = new ConnectionFactory().getMongoClient();
+                    rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+                    rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+                    initialSettings = settings.getCorpora();
+                    return;
+                } else if (rollingEcosystemRewards == null) {
+                    rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+                    rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+                } else if (rollingEcosystemRewards.settingsConnection.mongoClient == null) {
+                    //TODO Mongoclient should be checked for null not the class
+                    rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+                    rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+                }
 
-				System.out.println("Scheduler: " + count + " - " + RollingEcosystemRewards.nowDate());
+                System.out.println("Scheduler: " + count + " - " + RollingEcosystemRewards.nowDate());
 
-				if (rollingEcosystemRewards != null) {
+                if (rollingEcosystemRewards != null) {
 
-					JSONObject paramDoc = rollingEcosystemRewards.checkCorpora(settings);
-					if (!paramDoc.isEmpty()) {
+                    JSONObject paramDoc = rollingEcosystemRewards.checkCorpora(settings);
+                    if (!paramDoc.isEmpty()) {
 
-						try {
-							String algo = paramDoc.getJSONObject("randomisation").getString("approach");
+                        try {
+                            String algo = paramDoc.getJSONObject("randomisation").getString("approach");
 
-							System.out.println("A=====================================================================================================================");
-							System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingEcosystemRewards.nowDate());
-							System.out.println("A=====================================================================================================================");
+                            System.out.println("A=====================================================================================================================");
+                            System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingEcosystemRewards.nowDate());
+                            System.out.println("A=====================================================================================================================");
 
-							/** PROCESS INDEXES ONCE PER STARTUP */
-							if (count == 0)
-								rollingEcosystemRewards.indexes(mongoClient);
+                            /** PROCESS INDEXES ONCE PER STARTUP */
+                            mongoClient.close();
+                            mongoClient = new ConnectionFactory().getMongoClient();
 
-							if (algo.equals("binaryThompson"))
-								rollingEcosystemRewards.process(paramDoc);
-							if (algo.equals("naiveBayes"))
-								rollingNaiveBayes.process(paramDoc);
-							if (algo.equals("behaviorAlgos"))
-								rollingBehavior.process(paramDoc);
-							if (algo.equals("Network"))
-								rollingNetwork.process(paramDoc);
-							if (algo.equals("QLearning"))
-								rollingQLearning.process(paramDoc);
+                            if (count == 0)
+                                rollingEcosystemRewards.indexes(mongoClient);
 
-						} catch (Exception e) {
+                            if (algo.equals("binaryThompson")) {
+                                rollingEcosystemRewards = null;
+                                rollingEcosystemRewards.process(paramDoc);
+                            }
+                            if (algo.equals("epsilonGreedy"))
+                                rollingEcosystemRewards.process(paramDoc);
+                            if (algo.equals("naiveBayes")) {
+                                rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
+                                rollingNaiveBayes.process(paramDoc);
+                            }
+                            if (algo.equals("behaviorAlgos")) {
+                                rollingBehavior = new RollingBehavior(mongoClient);
+                                rollingBehavior.process(paramDoc);
+                            }
+                            if (algo.equals("Network")) {
+                                rollingNetwork = new RollingNetwork(mongoClient);
+                                rollingNetwork.process(paramDoc);
+                            }
+                            if (algo.equals("QLearning")) {
+                                rollingQLearning = new RollingQLearning(mongoClient);
+                                rollingQLearning.process(paramDoc);
+                            }
 
-							System.out.println("B=====================================================================================================================");
-							System.out.println("B===>>> Dynamic engine not processing. Updating all settings now...");
-							System.out.println("B=====================================================================================================================");
+                        } catch (Exception e) {
+                            System.out.println("Error: " + e.getMessage());
+                            e.printStackTrace();
+                            System.out.println("B=====================================================================================================================");
+                            System.out.println("B===>>> Dynamic engine not processing. Updating all settings now...");
+                            System.out.println("B=====================================================================================================================");
 
-							System.out.println("Settings changed, restarting...");
-							if (mongoClient != null)
-								mongoClient.close();
-							mongoClient = new ConnectionFactory().getMongoClient();
-							rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-							rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-							initialSettings = settings.getCorpora();
+                            System.out.println("Settings changed, restarting...");
+                            if (mongoClient != null)
+                                mongoClient.close();
+                            mongoClient = new ConnectionFactory().getMongoClient();
+                            rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+                            rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+                            initialSettings = settings.getCorpora();
 
-						}
-					}
+                        }
+                    }
 
-					count = count + 1;
+                    count = count + 1;
 				}
 			}
 		}
