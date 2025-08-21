@@ -39,6 +39,19 @@ public class BusinessLogicReward extends RewardSuper {
         JSONObject rewards = new JSONObject();
 
         try {
+            if (params.isEmpty()) {
+                rewards.put("reward", reward);
+                rewards.put("learning_reward", learning_reward);
+                rewards.put("learning_for_contacts",false);
+                rewards.put("learning_for_responses",true);
+                params.put("rewards", rewards);
+                return params;
+            }
+        } catch (Exception e) {
+            LOGGER.error("BusinessLogicReward:E002: Error checking for empty params: "+e.getMessage());
+        }
+
+        try {
             /* Check if the business logic configuration is present*/
             boolean business_Logic_configuration_check = false;
             if (params.has("preloadCorpora")) {
@@ -69,7 +82,7 @@ public class BusinessLogicReward extends RewardSuper {
 
             /* If neither rewards nor learning_reward are configured return the default values*/
             if (!rewards_configuration_check && !learning_reward_configuration_check) {
-                LOGGER.error("BusinessLogicReward:E002: Neither reward nor learning_reward found in rewards_business_logic. Returning default rewards.");
+                LOGGER.error("BusinessLogicReward:E003: Neither reward nor learning_reward found in rewards_business_logic. Returning default rewards.");
                 rewards.put("reward", reward);
                 rewards.put("learning_reward", learning_reward);
                 params.put("rewards", rewards);
@@ -101,6 +114,8 @@ public class BusinessLogicReward extends RewardSuper {
 
         rewards.put("reward", reward);
         rewards.put("learning_reward", learning_reward);
+        rewards.put("learning_for_contacts",false);
+        rewards.put("learning_for_responses",true);
         params.put("rewards", rewards);
         return params;
     }

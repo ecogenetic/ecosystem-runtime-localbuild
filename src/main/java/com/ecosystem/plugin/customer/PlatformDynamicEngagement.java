@@ -257,6 +257,7 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 						finalOffersObject.put("offer_name_desc", offer);
 					else
 						finalOffersObject.put("offer_name_desc", option.getString("option"));
+
 					/* process final */
 					finalOffersObject.put("score", p);
 					finalOffersObject.put("final_score", p);
