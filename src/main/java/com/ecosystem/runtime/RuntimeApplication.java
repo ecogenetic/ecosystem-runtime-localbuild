@@ -22,6 +22,7 @@ import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.cassandra.CassandraReactiveDataAutoConfiguration;
 
@@ -61,6 +62,7 @@ import static com.ecosystem.worker.license.ValidationService.setEnvKey;
 		})
 @SpringBootApplication(exclude = {
 		KafkaAutoConfiguration.class,
+        CassandraAutoConfiguration.class,
 		CassandraDataAutoConfiguration.class,
 		CassandraReactiveDataAutoConfiguration.class,
 		MongoDataAutoConfiguration.class,
