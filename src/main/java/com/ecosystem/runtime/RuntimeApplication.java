@@ -1,9 +1,13 @@
 package com.ecosystem.runtime;
 
 import com.ecosystem.data.mongodb.ConnectionFactory;
+import com.ecosystem.plugin.PluginLoader;
 import com.ecosystem.runtime.continuous.*;
 import com.ecosystem.utils.EnvironmentalVariables;
 import com.ecosystem.utils.GlobalSettings;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
+import com.ecosystem.worker.license.ValidationService;
 import com.mongodb.client.MongoClient;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -14,8 +18,6 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import com.ecosystem.utils.log.LogManager;
-import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springdoc.core.models.GroupedOpenApi;
@@ -25,28 +27,31 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.cassandra.CassandraReactiveDataAutoConfiguration;
-
 import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration;
+import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration;
-
-import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.AbstractRequestMatcherRegistry;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Calendar;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.TimeZone;
 
 import static com.ecosystem.worker.license.ValidationService.getEnvKey;
 import static com.ecosystem.worker.license.ValidationService.setEnvKey;
@@ -63,7 +68,7 @@ import static com.ecosystem.worker.license.ValidationService.setEnvKey;
 @SpringBootApplication(exclude = {
 		KafkaAutoConfiguration.class,
         CassandraAutoConfiguration.class,
-		CassandraDataAutoConfiguration.class,
+        CassandraDataAutoConfiguration.class,
 		CassandraReactiveDataAutoConfiguration.class,
 		MongoDataAutoConfiguration.class,
 		MongoRepositoriesAutoConfiguration.class,
@@ -84,6 +89,8 @@ public class RuntimeApplication {
 	private static String role = "ADMIN";
 	private static String classLoader = null;
 
+	static String MASTER_KEY; //  = "13a6a3f7-9196-4fbb-95eb-4891e508c76d";
+
 	static GlobalSettings settings;
 	static JSONArray initialSettings = null;
 
@@ -101,7 +108,7 @@ public class RuntimeApplication {
 		}
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.6.1 Build: 2025-07.32");
+		System.out.println("Version: 0.9.6.1.1 Build: 2025-08.21");
 		System.out.println("============================================================");
 
 		Calendar c = Calendar.getInstance();
@@ -114,16 +121,66 @@ public class RuntimeApplication {
 		String env_port = EnvironmentalVariables.getEnvKey("SERVER_PORT");
 		if (env_port != null) p = env_port;
 
-		if (settings.getCorpora() != null)
-			initialSettings = settings.getCorpora();
+		/* TODO: Set global var for Logging! */
+		if (args.length > 0) {
+			LOGGER.info("Runtime Parameters: " + args[0]);
+			for (int i = 0; i < args.length; i++) {
+				if (args[i].toLowerCase().contains("--port=")) {
+					try {
+						LOGGER.info("Set port number via command line parameter: " + args[i]);
+						p = args[i].substring(7);
+						System.setProperty("server.port", p);
+					} catch (Exception e) {
+						LOGGER.error("Set port number via command line parameter, eg: --port 9090 ");
+					}
+				}
+				if (args[i].toLowerCase().equalsIgnoreCase("--port")) {
+					try {
+						LOGGER.info("Set port number via command line parameter: " + args[i + 1]);
+						p = args[i + 1];
+						System.setProperty("server.port", p);
+					} catch (Exception e) {
+						LOGGER.error("Set port number via command line parameter, eg: --port 9090 ");
+					}
+				}
+				try {
+					if (args[i].toLowerCase().equalsIgnoreCase("--plugin")) {
+						classLoader = args[i + 1];
+						PluginLoader p = new PluginLoader(classLoader);
+						LOGGER.info("Plugin: " + args[i + 1]);
+					}
 
-		context = SpringApplication.run(RuntimeApplication.class, args);
+					/* security and access */
+					if (args[i].toLowerCase().equalsIgnoreCase("--security")) {
+						LOGGER.info("Security Enabled");
+						securityFlag = true;
+					}
+				} catch (Exception e) {
+					LOGGER.info("Error on command line: " + e);
+				}
+			}
+		}
+		/* If the key is used overwrite date check... */
+		if (key != null) {
+			MASTER_KEY = key;
+			System.out.println("Key used (command line)...");
+		} else {
+			MASTER_KEY = getEnvKey("MASTER_KEY");
+			System.out.println("Key used (environment)...");
+		}
 
-		LOGGER.info("RuntimeApplication: ecosystem.Ai Client Pulse Responder Started on port number: " + p);
-		System.out.println("====================================================================================");
-		System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
-		System.out.println("====================================================================================");
+		if (ValidationService.validate(MASTER_KEY, "client-pulse-responder@startup")) {
+			if (settings.getCorpora() != null)
+				initialSettings = settings.getCorpora();
 
+			setEnvKey("MASTER_KEY", MASTER_KEY);
+			context = SpringApplication.run(RuntimeApplication.class, args);
+			LOGGER.info("RuntimeApplication: ecosystem.Ai Client Pulse Responder Started on port number: " + p);
+			System.out.println("====================================================================================");
+			System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
+			System.out.println("====================================================================================");
+
+		}
 	}
 
 	/*****************************************************************************************************************
@@ -143,60 +200,58 @@ public class RuntimeApplication {
 		return new OpenAPI()
 				.info(
 						new Info().title("ecosystem.Ai Client Pulse Responder API")
-								.description("The ecosystem.Ai Client Pulse Responder Engine brings the power of real-time and near-time predictions to the enterprise. Implement your behavioral construct " +
-										"and core hypotheses through a configurable prediction platform. If you don't know how the model is going to behave, use our behavioral tracker" +
+						.description("The ecosystem.Ai Client Pulse Responder Engine brings the power of real-time and near-time predictions to the enterprise. Implement your behavioral construct " +
+								"and core hypotheses through a configurable prediction platform. If you don't know how the model is going to behave, use our behavioral tracker" +
 										"to assist with selection and exploit the most successful options.")
-								.version("v0.9.6")
-								.license(new License().name("ecosystem.Ai 1.0").url("https://ecosystem.ai")))
-				.externalDocs(new ExternalDocumentation()
+						.version("v0.9.6")
+						.license(new License().name("ecosystem.Ai 1.0").url("https://ecosystem.ai")))
+						.externalDocs(new ExternalDocumentation()
 						.description("Learn Ecosystem")
 						.url("https://developer.ecosystem.ai")
-				).components(new Components()
+						).components(new Components()
 
-						//API Key, see: https://swagger.io/docs/specification/authentication/api-keys/
-						.addSecuritySchemes("apiKeyScheme", new SecurityScheme()
-								.type(SecurityScheme.Type.APIKEY)
-								.in(SecurityScheme.In.HEADER)
-								.name("X-API-KEY")
-						)
+								//API Key, see: https://swagger.io/docs/specification/authentication/api-keys/
+								.addSecuritySchemes("apiKeyScheme", new SecurityScheme()
+										.type(SecurityScheme.Type.APIKEY)
+										.in(SecurityScheme.In.HEADER)
+										.name("X-API-KEY")
+								)
 				).addSecurityItem(new SecurityRequirement().addList("apiKeyScheme"));
 	}
 
-
 	/* This is to turn security off. Username and password is in the application.properties file */
-	@Bean
-	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-		if (!securityFlag) {
-			// System.out.println("Loading...");
-			http.csrf(csrf -> csrf.disable())
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
+        if (!securityFlag) {
+			http
+					.csrf(csrf -> csrf.disable())
 					.authorizeHttpRequests(auth -> auth
-							.requestMatchers(HttpMethod.GET, "/**").permitAll()
-							.requestMatchers(HttpMethod.POST, "/**").permitAll()
-							.requestMatchers(HttpMethod.PUT, "/**").permitAll()
-							.requestMatchers("/actuator/**").permitAll());
-		} else if (securityFlag) {
-			if (ip != null) {
-				System.out.println("Secure on: " + ip);
-				if (role.contains("USER")) {
-					http.csrf(csrf -> csrf.disable())
-							.authorizeHttpRequests(auth -> auth.anyRequest())
-							.httpBasic(Customizer.withDefaults());
-				} else if (role.contains("ADMIN")) {
-					http.csrf(csrf -> csrf.disable())
-							.authorizeHttpRequests(auth -> auth.anyRequest())
-							.httpBasic(Customizer.withDefaults());
-				}
-			} else {
-				System.out.println("Secure :)");
-				http.csrf(csrf -> csrf.disable())
-						.authorizeHttpRequests(auth -> auth
-								.requestMatchers("/**").authenticated()
-								.requestMatchers("/*").authenticated())
-						.httpBasic(Customizer.withDefaults());
-			}
-		}
-		return http.build();
-	}
+							.requestMatchers("/**").permitAll()
+					)
+					.cors(cors -> cors.configurationSource(corsConfigurationSource));
+		} else {
+            if (ip != null) {
+                System.out.println("Secure on: " + ip);
+                if (role.contains("USER")) {
+                    http.csrf(AbstractHttpConfigurer::disable)
+                            .authorizeHttpRequests(AbstractRequestMatcherRegistry::anyRequest)
+                            .httpBasic(Customizer.withDefaults());
+                } else if (role.contains("ADMIN")) {
+                    http.csrf(AbstractHttpConfigurer::disable)
+                            .authorizeHttpRequests(AbstractRequestMatcherRegistry::anyRequest)
+                            .httpBasic(Customizer.withDefaults());
+                }
+            } else {
+                System.out.println("Secure :)");
+                http.csrf(AbstractHttpConfigurer::disable)
+                        .authorizeHttpRequests(auth -> auth
+                                .requestMatchers("/**").authenticated()
+                                .requestMatchers("/*").authenticated())
+                        .httpBasic(Customizer.withDefaults());
+            }
+        }
+        return http.build();
+    }
 
 	/*****************************************************************************************************************
 	 * Scheduling engine for model creating and scoring updates.
@@ -225,99 +280,105 @@ public class RuntimeApplication {
 		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
-            settings = new GlobalSettings();
-            if (settings.getCorpora() != null && mongoClient != null) {
+			settings = new GlobalSettings();
+			if (settings.getCorpora() != null && mongoClient != null) {
 
-                if (initialSettings == null)
-                    initialSettings = new JSONArray();
+				if (initialSettings == null)
+					initialSettings = new JSONArray();
 
-                /** Changes in settings */
-                if (!initialSettings.toString().equals(settings.getCorpora().toString())) {
-                    System.out.println("Settings changed, restarting...");
-                    if (mongoClient != null)
-                        mongoClient.close();
-                    mongoClient = new ConnectionFactory().getMongoClient();
-                    rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-                    rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-                    initialSettings = settings.getCorpora();
-                    return;
-                } else if (rollingEcosystemRewards == null) {
-                    rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-                    rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-                } else if (rollingEcosystemRewards.settingsConnection.mongoClient == null) {
-                    //TODO Mongoclient should be checked for null not the class
-                    rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-                    rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-                }
+				/** Changes in settings */
+				if (!initialSettings.toString().equals(settings.getCorpora().toString())) {
+					System.out.println("Settings changed, restarting...");
+					if (mongoClient != null)
+						mongoClient.close();
+					mongoClient = new ConnectionFactory().getMongoClient();
+					rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+					rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+					initialSettings = settings.getCorpora();
+					return;
+				} else if (rollingEcosystemRewards == null) {
+					rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+					rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+				} else if (rollingEcosystemRewards.settingsConnection.mongoClient == null) {
+					//TODO Mongoclient should be checked for null not the class
+					rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+					rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+				}
 
-                System.out.println("Scheduler: " + count + " - " + RollingEcosystemRewards.nowDate());
+				System.out.println("Scheduler: " + count + " - " + RollingEcosystemRewards.nowDate());
 
-                if (rollingEcosystemRewards != null) {
+				if (rollingEcosystemRewards != null) {
 
-                    JSONObject paramDoc = rollingEcosystemRewards.checkCorpora(settings);
-                    if (!paramDoc.isEmpty()) {
+					JSONObject paramDoc = rollingEcosystemRewards.checkCorpora(settings);
+					if (!paramDoc.isEmpty()) {
 
-                        try {
-                            String algo = paramDoc.getJSONObject("randomisation").getString("approach");
+						try {
+							String algo = paramDoc.getJSONObject("randomisation").getString("approach");
 
-                            System.out.println("A=====================================================================================================================");
-                            System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingEcosystemRewards.nowDate());
-                            System.out.println("A=====================================================================================================================");
+							System.out.println("A=====================================================================================================================");
+							System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingEcosystemRewards.nowDate());
+							System.out.println("A=====================================================================================================================");
 
-                            /** PROCESS INDEXES ONCE PER STARTUP */
+							/** PROCESS INDEXES ONCE PER STARTUP */
                             mongoClient.close();
                             mongoClient = new ConnectionFactory().getMongoClient();
 
-                            if (count == 0)
-                                rollingEcosystemRewards.indexes(mongoClient);
+							if (count == 0)
+								rollingEcosystemRewards.indexes(mongoClient);
 
-                            if (algo.equals("binaryThompson")) {
+							if (algo.equals("binaryThompson")) {
                                 rollingEcosystemRewards = null;
+                                rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
                                 rollingEcosystemRewards.process(paramDoc);
                             }
-                            if (algo.equals("epsilonGreedy"))
-                                rollingEcosystemRewards.process(paramDoc);
-                            if (algo.equals("naiveBayes")) {
+							if (algo.equals("epsilonGreedy"))
+                                rollingEcosystemRewards = null;
+                                rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+								rollingEcosystemRewards.process(paramDoc);
+							if (algo.equals("naiveBayes")) {
+                                rollingNaiveBayes = null;
                                 rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
-                                rollingNaiveBayes.process(paramDoc);
+								rollingNaiveBayes.process(paramDoc);
                             }
-                            if (algo.equals("behaviorAlgos")) {
+							if (algo.equals("behaviorAlgos")) {
+                                rollingBehavior = null;
                                 rollingBehavior = new RollingBehavior(mongoClient);
                                 rollingBehavior.process(paramDoc);
                             }
-                            if (algo.equals("Network")) {
+							if (algo.equals("Network")) {
+                                rollingNetwork = null;
                                 rollingNetwork = new RollingNetwork(mongoClient);
                                 rollingNetwork.process(paramDoc);
                             }
-                            if (algo.equals("QLearning")) {
+							if (algo.equals("QLearning")) {
+                                rollingQLearning = null;
                                 rollingQLearning = new RollingQLearning(mongoClient);
                                 rollingQLearning.process(paramDoc);
                             }
 
-                        } catch (Exception e) {
-                            System.out.println("Error: " + e.getMessage());
-                            e.printStackTrace();
-                            System.out.println("B=====================================================================================================================");
-                            System.out.println("B===>>> Dynamic engine not processing. Updating all settings now...");
-                            System.out.println("B=====================================================================================================================");
+						} catch (Exception e) {
+							System.out.println("Error: " + e.getMessage());
+							e.printStackTrace();
+							System.out.println("B=====================================================================================================================");
+							System.out.println("B===>>> Dynamic engine not processing. Updating all settings now...");
+							System.out.println("B=====================================================================================================================");
 
-                            System.out.println("Settings changed, restarting...");
-                            if (mongoClient != null)
-                                mongoClient.close();
-                            mongoClient = new ConnectionFactory().getMongoClient();
-                            rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-                            rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-                            initialSettings = settings.getCorpora();
+							System.out.println("Settings changed, restarting...");
+							if (mongoClient != null)
+								mongoClient.close();
+							mongoClient = new ConnectionFactory().getMongoClient();
+							rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+							rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
+							initialSettings = settings.getCorpora();
 
-                        }
-                    }
+						}
+					}
 
-                    count = count + 1;
+					count = count + 1;
 				}
 			}
 		}
 	}
-
 
 	public static ConfigurableApplicationContext getContext() {
 		return context;

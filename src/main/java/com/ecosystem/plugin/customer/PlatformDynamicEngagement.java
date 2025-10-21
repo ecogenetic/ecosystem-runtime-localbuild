@@ -43,10 +43,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 		double startTimePost = System.nanoTime();
 		try {
 
-//			params.put("business_logic", "api");
-//			params.put("business_logic_params", "dowork");
-//			params.put("business_logic_action", "http://localhost:8091/business");
-//			params = BusinessLogic.getValues(params);
+            //			params.put("business_logic", "api");
+            //			params.put("business_logic_params", "dowork");
+            //			params.put("business_logic_action", "http://localhost:8091/business");
+            //			params = BusinessLogic.getValues(params);
 
 			/** Setup JSON objects for specific prediction case */
 			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
@@ -120,7 +120,8 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			String contextual_variable_one = String.valueOf(work.get("contextual_variable_one"));
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
 
-			for(int j : optionsSequence) {
+			for (int j : optionsSequence) {
+
 				if (j > params.getInt("resultcount")) break;
 
 				JSONObject option = options.getJSONObject(j);
@@ -174,19 +175,11 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 							}
 						}
 					} catch (Exception e) {
-						LOGGER.info("\n\n" + offer + " -> Oh no, there's something wrong with the time range check, and will be ignored! use api params: {day:'monday', 'time': '11.00 AM'} " + e.getMessage() + "\n\n");
+						LOGGER.info(offer + " -> Time range check error, and will be ignored! use api params: {day:'monday', 'time': '11.00 AM'} " + e.getMessage() );
 					}
 				}
 
-
-//				String contextual_variable_one_Option = "";
-//				if (option.has("contextual_variable_one") && !contextual_variable_one.equals(""))
-//					contextual_variable_one_Option = String.valueOf(option.get("contextual_variable_one"));
-//				String contextual_variable_two_Option = "";
-//				if (option.has("contextual_variable_two") && !contextual_variable_two.equals(""))
-//					contextual_variable_two_Option = String.valueOf(option.get("contextual_variable_two"));
-
-				/* If eligibility list has been extracted from in_params, check that offer is eligible*/
+                /* If eligibility list has been extracted from in_params, check that offer is eligible*/
 				boolean eligibility_from_params = true;
 				if (check_eligibility_list) {
 					if (!eligibility_list.has(offer)) {
