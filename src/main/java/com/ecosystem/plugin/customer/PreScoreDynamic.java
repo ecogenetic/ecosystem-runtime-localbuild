@@ -41,7 +41,7 @@ public class PreScoreDynamic extends PreScoreSuper {
             /* Virtual variables are loaded from the properties file */
             //params = getVirtualVariables(params);
 
-            /** Pupulate contextual variables by default based on settings. */
+            /** Populate contextual variables by default based on settings. */
             params = getPrepopulateContextualVariables(params);
 
         } catch (Exception e) {

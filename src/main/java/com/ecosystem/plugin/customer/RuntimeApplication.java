@@ -1,4 +1,4 @@
-package com.ecosystem.runtime;
+package com.ecosystem.plugin.customer;
 
 import com.ecosystem.data.mongodb.ConnectionFactory;
 import com.ecosystem.plugin.PluginLoader;
@@ -379,6 +379,64 @@ public class RuntimeApplication {
 			}
 		}
 	}
+
+
+
+
+	/*****************************************************************************************************************
+	 * Scheduling engine for real-time features. Temporarily disabled...
+	 *****************************************************************************************************************/
+//	@EnableScheduling
+//	@EnableAsync
+//	class ScheduledActivityRealTimeTraining {
+//		private String uuid = null;
+//		private long count = 0;
+//		GlobalSettings settings;
+//		{
+//			try {
+//				settings = new GlobalSettings();
+//			} catch (Exception e) {
+//				throw new RuntimeException(e);
+//			}
+//		}
+//
+//		RollingFeatures rollingFeatures = new RollingFeatures();
+//
+//		/**
+//		 * Continous scheduling engine.
+//		 * Set FEATURE_DELAY in seconds for processing, default is set to 10 mins.
+//		 */
+//		@Async
+//		@Qualifier(value = "taskExecutor2")
+//		@Scheduled(fixedDelayString = "${feature.delay}000", initialDelay = 80000)
+//		public void scheduleFixedRateTaskAsync() throws Exception {
+//
+//			//TODO: THIS IS DISABLED FOR NOW, UNTIL ANOTHER APPROACH IS CREATED OR IMPLEMENTED.
+//
+////			System.out.println("F==================================================================================================");
+////			System.out.println("F===>>> Execute Features and Training Engine (" + count + "): " + RollingEcosystemRewards.nowDate());
+////			System.out.println("F==================================================================================================");
+//
+//			/** PROCESS REAL-TIME FEATURE CREATION */
+//			try {
+////				settings = new GlobalSettings();
+////
+////				if (rollingFeatures == null)
+////					rollingFeatures = new RollingFeatures();;
+////
+////				rollingFeatures.process();
+//
+//			} catch (Exception e) {
+//				System.out.println("F==================================================================================================");
+//				System.out.println("F===>>> Feature creation engine not processing, check FEATURE_DELAY env variable.");
+//				System.out.println("F==================================================================================================");
+//				e.printStackTrace();
+//			}
+//
+////			count = count + 1;
+//
+//		}
+//	}
 
 	public static ConfigurableApplicationContext getContext() {
 		return context;

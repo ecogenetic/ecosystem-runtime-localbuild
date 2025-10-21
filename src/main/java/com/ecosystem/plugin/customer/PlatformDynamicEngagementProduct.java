@@ -9,18 +9,14 @@ import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
-
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
  * Use this class to score with dynamic sampling configurations. This class is configured to work with no model.
  */
-public class PlatformDynamicEngagement extends PostScoreSuper {
-	private static final Logger LOGGER = LogManager.getLogger(PlatformDynamicEngagement.class.getName());
+public class PlatformDynamicEngagementProduct extends PostScoreSuper {
+	private static final Logger LOGGER = LogManager.getLogger(PlatformDynamicEngagementProduct.class.getName());
 
-	public PlatformDynamicEngagement() {
+	public PlatformDynamicEngagementProduct() {
 	}
 
 	/**
@@ -43,10 +39,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 		double startTimePost = System.nanoTime();
 		try {
 
-            //			params.put("business_logic", "api");
-            //			params.put("business_logic_params", "dowork");
-            //			params.put("business_logic_action", "http://localhost:8091/business");
-            //			params = BusinessLogic.getValues(params);
+//			params.put("business_logic", "api");
+//			params.put("business_logic_params", "dowork");
+//			params.put("business_logic_action", "http://localhost:8091/business");
+//			params = BusinessLogic.getValues(params);
 
 			/** Setup JSON objects for specific prediction case */
 			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
@@ -121,7 +117,6 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
 
 			for (int j : optionsSequence) {
-
 				if (j > params.getInt("resultcount")) break;
 
 				JSONObject option = options.getJSONObject(j);
@@ -133,53 +128,14 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 				 */
 				/** GENERATE DEFAULT IF OPTION IS NOT IN OFFER MATRIX! */
 				String offer = option.getString("optionKey");
+                JSONObject product = offerMatrixWithKey.getJSONObject(option.getString("optionKey"));
 				if (!offerMatrixWithKey.has(option.getString("optionKey"))) {
 					JSONObject singleOffer = defaultOffer(offer);
 					offerMatrixWithKey.put(option.getString("optionKey"), singleOffer);
 					LOGGER.warn("BEWARE, DEFAULT OFFER GENERATED. IN OPTIONS STORE AND NOT OFFER MATRIX: " + option.getString("optionKey"));
 				}
 
-				/** Test eligibility TODO: CREATE A SEPARATE SUPERCLASS WITH THIS IN IT! */
-				if (locations != null) {
-					try {
-						if (locations.getJSONObject(offer).has("open_times")) {
-							String day = params.getJSONObject("in_params").getString("day");
-							String time = params.getJSONObject("in_params").getString("time");
-
-							if (locations.getJSONObject(offer).getJSONObject("open_times").has(day)) {
-								if (locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).has("opening1") &&
-										locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).has("closing1")) {
-
-									LOGGER.info("It's Open!");
-									if (!locations.getJSONObject(offer).getJSONObject("open_times").getString("operatingStatus").equals("operating"))
-										continue;
-
-									SimpleDateFormat sdf = new SimpleDateFormat("hh:mm a");
-
-									Date opening = sdf.parse(locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).getString("opening1"));
-									Date closing = sdf.parse(locations.getJSONObject(offer).getJSONObject("open_times").getJSONObject(day).getString("closing1"));
-									if (closing.before(opening)) {
-										Calendar cal = Calendar.getInstance();
-										cal.setTime(closing);
-										cal.add(Calendar.DATE, 1);
-										closing = cal.getTime();
-									}
-									Date time_now = sdf.parse(time);
-									if (time_now.after(opening) && time_now.before(closing)) {
-										LOGGER.info("It's Open!");
-									} else {
-										continue;
-									}
-
-								}
-							}
-						}
-					} catch (Exception e) {
-						LOGGER.info(offer + " -> Time range check error, and will be ignored! use api params: {day:'monday', 'time': '11.00 AM'} " + e.getMessage() );
-					}
-				}
-
-                /* If eligibility list has been extracted from in_params, check that offer is eligible*/
+				/* If eligibility list has been extracted from in_params, check that offer is eligible*/
 				boolean eligibility_from_params = true;
 				if (check_eligibility_list) {
 					if (!eligibility_list.has(offer)) {
@@ -280,6 +236,7 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					finalOffersObject.put("uuid", params.get("uuid"));
 					finalOffersObject.put("arm_reward", arm_reward);
 					finalOffersObject.put("learning_reward", learning_reward);
+                    finalOffersObject.put("product", product);
 
 					/* Debugging variables */
 					if (!option.has("expected_takeup"))
@@ -304,6 +261,8 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
 			predictModelMojoResult.put("final_result", sortJsonArray);
+            /** Anything added to data will be pushed out to the api response */
+            predictModelMojoResult.put("data", new JSONObject().put("featuresObj", featuresObj));
 
 			predictModelMojoResult = getTopScores(params, predictModelMojoResult);
 

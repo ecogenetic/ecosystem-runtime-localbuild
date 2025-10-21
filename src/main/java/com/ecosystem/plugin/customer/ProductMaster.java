@@ -1,6 +1,8 @@
-package com.ecosystem.runtime;
+package com.ecosystem.plugin.customer;
 
 import com.ecosystem.plugin.business.BusinessLogic;
+import com.ecosystem.runtime.ProductMasterSuper;
+import com.ecosystem.runtime.ValidateParams;
 import com.ecosystem.utils.JSONDecode;
 import com.ecosystem.utils.JSONFlattener;
 import com.ecosystem.utils.log.LogManager;
@@ -413,7 +415,76 @@ public class ProductMaster extends ProductMasterSuper {
 		this.UPDATE = setFinal(false, predictResult);
 
 		return predictResult.toString();
-    }
+
+//
+//		JSONObject paramsParams = new JSONObject();
+//		try {
+//			String in_params = URLDecoder.decode(jsonParams);
+//			if (in_params.startsWith("\"")) in_params = in_params.substring(1, in_params.length() - 1).replaceAll("\\\\", "");
+//			paramsParams = new JSONObject(in_params);
+//		} catch (org.json.JSONException e) {
+//			LOGGER.info("/offerRecommendations malformed params JSON input: " + jsonParams);
+//			return paramsParams.put("ErrorMessage", e).toString();
+//		}
+//
+//		/* Setup values from input params that will be placed in */
+//		JSONObject param = new JSONObject();
+//		String uuid = generateUUID();
+//		param.put("headers", headers);
+//		param.put("uuid", uuid);
+//		param.put("UPDATE", this.UPDATE);
+//
+//		LOGGER.info("/invocations:UUID: " + uuid + " predictor: " + campaign);
+//
+//		param.put("customer", customer);
+//		param.put("name", campaign);
+//		param.put("subcampaign", subcampaign);
+//		param.put("channel", channel);
+//		param.put("subname", subcampaign);
+//		param.put("resultcount", numberoffers);
+//		param.put("userid", userid);
+//		/* this is needed to not cause a stack overflow as adding current value of json object */
+//		JSONObject inParam = new JSONObject(param.toString());
+//		param.put("api_params", inParam);
+//
+//		/** Set defaults for model and paramneters from database */
+//		param.put("in_params", paramsParams);
+//		if (paramsParams.has("input")) {
+//			param.put("input", paramsParams.getJSONArray("input"));
+//			param.put("value", paramsParams.getJSONArray("value"));
+//			param.put("lookup", new JSONObject().put("value", customer).put("key", "customer"));
+//			param.put("dbparam", false);
+//		} else {
+//			param.put("dbparam", true);
+//			param = ValidateParams.getLookupFromParams(settings, param, customer);
+//		}
+//
+//		param.put("mojo", "1");
+//
+//		/** Obtain default epsilon from properties or obtain from input params */
+//		if (!paramsParams.has("mab")) {
+//			JSONObject mabParam = new JSONObject();
+//			mabParam.put("class", "mabone");
+//			mabParam.put("epsilon", settings.getEpsilon());
+//			param.put("mab", mabParam);
+//		} else {
+//			param.put("mab", paramsParams.getJSONObject("mab"));
+//		}
+//
+//		/** Primary prediction from EcosystemMaster.getPredictionResult */
+//		JSONObject predictResult = new JSONObject();
+//		predictResult = ecosystemMaster.getPredictionResult(mongoClient, param);
+//		if (param.has("in_params")) predictResult.put("in_params", param.getJSONObject("in_params"));
+//		if (predictResult.has("ErrorMessage")) {
+//			predictResult.put("error", 1);
+//		}
+//
+//		predictResult.remove("predict_result");
+//
+//		this.UPDATE = setFinal(false, predictResult);
+//
+//		return predictResult.toString();
+	}
 
 	/**
 	 * Update offers taken up by customers/msisdn
