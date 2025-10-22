@@ -1,13 +1,11 @@
 package com.ecosystem.runtime;
 
 import com.ecosystem.data.mongodb.ConnectionFactory;
-import com.ecosystem.plugin.PluginLoader;
 import com.ecosystem.runtime.continuous.*;
 import com.ecosystem.utils.EnvironmentalVariables;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import com.ecosystem.worker.license.ValidationService;
 import com.mongodb.client.MongoClient;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -89,8 +87,6 @@ public class RuntimeApplication {
 	private static String role = "ADMIN";
 	private static String classLoader = null;
 
-	static String MASTER_KEY; //  = "13a6a3f7-9196-4fbb-95eb-4891e508c76d";
-
 	static GlobalSettings settings;
 	static JSONArray initialSettings = null;
 
@@ -108,7 +104,7 @@ public class RuntimeApplication {
 		}
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.6.1.1 Build: 2025-08.21");
+		System.out.println("Version: 0.9.6.1.2 Build: 2025-10.34");
 		System.out.println("============================================================");
 
 		Calendar c = Calendar.getInstance();
@@ -121,66 +117,16 @@ public class RuntimeApplication {
 		String env_port = EnvironmentalVariables.getEnvKey("SERVER_PORT");
 		if (env_port != null) p = env_port;
 
-		/* TODO: Set global var for Logging! */
-		if (args.length > 0) {
-			LOGGER.info("Runtime Parameters: " + args[0]);
-			for (int i = 0; i < args.length; i++) {
-				if (args[i].toLowerCase().contains("--port=")) {
-					try {
-						LOGGER.info("Set port number via command line parameter: " + args[i]);
-						p = args[i].substring(7);
-						System.setProperty("server.port", p);
-					} catch (Exception e) {
-						LOGGER.error("Set port number via command line parameter, eg: --port 9090 ");
-					}
-				}
-				if (args[i].toLowerCase().equalsIgnoreCase("--port")) {
-					try {
-						LOGGER.info("Set port number via command line parameter: " + args[i + 1]);
-						p = args[i + 1];
-						System.setProperty("server.port", p);
-					} catch (Exception e) {
-						LOGGER.error("Set port number via command line parameter, eg: --port 9090 ");
-					}
-				}
-				try {
-					if (args[i].toLowerCase().equalsIgnoreCase("--plugin")) {
-						classLoader = args[i + 1];
-						PluginLoader p = new PluginLoader(classLoader);
-						LOGGER.info("Plugin: " + args[i + 1]);
-					}
+        if (settings.getCorpora() != null)
+            initialSettings = settings.getCorpora();
 
-					/* security and access */
-					if (args[i].toLowerCase().equalsIgnoreCase("--security")) {
-						LOGGER.info("Security Enabled");
-						securityFlag = true;
-					}
-				} catch (Exception e) {
-					LOGGER.info("Error on command line: " + e);
-				}
-			}
-		}
-		/* If the key is used overwrite date check... */
-		if (key != null) {
-			MASTER_KEY = key;
-			System.out.println("Key used (command line)...");
-		} else {
-			MASTER_KEY = getEnvKey("MASTER_KEY");
-			System.out.println("Key used (environment)...");
-		}
+        context = SpringApplication.run(RuntimeApplication.class, args);
 
-		if (ValidationService.validate(MASTER_KEY, "client-pulse-responder@startup")) {
-			if (settings.getCorpora() != null)
-				initialSettings = settings.getCorpora();
+        LOGGER.info("RuntimeApplication: ecosystem.Ai Client Pulse Responder Started on port number: " + p);
+        System.out.println("====================================================================================");
+        System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
+        System.out.println("====================================================================================");
 
-			setEnvKey("MASTER_KEY", MASTER_KEY);
-			context = SpringApplication.run(RuntimeApplication.class, args);
-			LOGGER.info("RuntimeApplication: ecosystem.Ai Client Pulse Responder Started on port number: " + p);
-			System.out.println("====================================================================================");
-			System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
-			System.out.println("====================================================================================");
-
-		}
 	}
 
 	/*****************************************************************************************************************
