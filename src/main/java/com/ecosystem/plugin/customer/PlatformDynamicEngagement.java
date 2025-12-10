@@ -300,6 +300,7 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					finalOffers.put(offerIndex, finalOffersObject);
 					offerIndex = offerIndex + 1;
 				}
+                LOGGER.info("");
 			}
 
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");

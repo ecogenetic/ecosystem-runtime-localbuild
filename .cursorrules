@@ -1,0 +1,1730 @@
+---
+description: ecosystem.Ai Runtime Plugin Development Guidelines
+globs:
+  - "**/plugin/**/*.java"
+  - "**/plugin/customer/*.java"
+  - "**/plugin/business/*.java"
+  - "**/plugin/reward/*.java"
+alwaysApply: true
+---
+
+# ecosystem.Ai Runtime Plugin Development Rules
+
+You are developing plugins for the ecosystem.Ai runtime scoring engine. Plugins extend the platform's functionality while maintaining strict contracts for integration with the dynamic scoring pipeline.
+
+## Core Principles
+
+### 1. Contract Adherence (CRITICAL)
+- **Method signatures MUST be strictly adhered to** - the runtime dynamically loads plugins via reflection
+- **Return types MUST match exactly** - JSONObject for all plugin methods
+- **Parameter order and types MUST match** - changing signatures breaks plugin loading
+- **Never modify method names** - `getPrePredict` and `getPostPredict` are contract requirements
+
+### 2. Plugin Types and Contracts
+
+#### Pre-Score Plugins (PreScoreSuper)
+**Purpose:** Preprocess input data before model scoring. Modify `params` to influence feature engineering, contextual variables, and input preparation.
+
+**Required Method Signature:**
+```java
+public static JSONObject getPrePredict(JSONObject params, CqlSession session)
+// OR for MongoDB access:
+public static JSONObject getPrePredict(MongoClient mongoClient, JSONObject params, CqlSession session)
+```
+
+**Contract Requirements:**
+- MUST return `params` JSONObject (modified or unmodified)
+- MUST NOT break the structure of `params` (preserve required keys)
+- CAN modify/add values in `params.getJSONObject("in_params")`
+- CAN modify/add values in `params.getJSONObject("featuresObj")`
+- CAN add new keys to `params` for downstream use
+- MUST handle missing keys gracefully (use `has()` before `get()`)
+
+**What You CAN Customize:**
+- Add/modify contextual variables (`contextual_variable_one`, `contextual_variable_two`)
+- Transform feature values in `featuresObj`
+- Add virtual variables or calculated features
+- Modify eligibility criteria
+- Adjust input parameters for scoring
+
+**What You MUST Preserve:**
+- Core structure of `params` object
+- Required keys: `uuid`, `userid`, `lookup`, `resultcount`, `explore`
+- Method signature and return type
+
+#### Post-Score Plugins (PostScoreSuper)
+**Purpose:** Postprocess model outputs, generate recommendations, adjust scores, apply business logic, and format final results.
+
+**Required Method Signature:**
+```java
+public static JSONObject getPostPredict(
+    JSONObject predictModelMojoResult,  // Model scoring results
+    JSONObject params,                  // Input parameters (carried through)
+    CqlSession session,                 // Cassandra session
+    EasyPredictModelWrapper[] models    // Preloaded H2O models
+)
+```
+
+**Contract Requirements:**
+- MUST return `predictModelMojoResult` JSONObject (modified)
+- MUST place final results in `predictModelMojoResult.put("final_result", JSONArray)`
+- MUST preserve `predictModelMojoResult.getJSONObject("featuresObj")` structure
+- CAN modify scores, values, pricing, and offer selection
+- MUST call `getTopScores(params, predictModelMojoResult)` before returning (if using MAB)
+
+**What You CAN Customize:**
+- Modify scores (`score`, `modified_offer_score`, `final_score`)
+- Adjust pricing (`offer_value`, `price`, `cost`)
+- Filter/rank offers in `final_result` array
+- Apply business rules and eligibility logic
+- Calculate derived metrics
+- Transform offer structures
+
+**What You MUST Preserve:**
+- Method signature (all 4 parameters, exact types)
+- Return type: `JSONObject`
+- Final result structure: `final_result` as JSONArray of offer objects
+- Required offer object fields: `offer`, `score`, `offer_name` (at minimum)
+
+### 3. Dynamic Data Loading Patterns
+
+The platform provides helper methods (inherited from super classes) for accessing dynamically loaded data:
+
+**Available Helper Methods:**
+```java
+// Get dynamic options/corpus (Multi-Armed Bandit arms)
+JSONArray options = getOptions(params);
+
+// Get option parameters (contextual variables, randomization settings)
+JSONObject optionParams = getOptionsParams(params);
+
+// Get location/eligibility data
+JSONObject locations = getLocations(params);
+
+// Get offer matrix (pricing, costs, offer details)
+JSONObject offerMatrixWithKey = params.getJSONObject("offerMatrixWithKey");
+
+// Apply top scores filtering (explore/exploit)
+predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+```
+
+**Standard Pattern for Dynamic Engagement:**
+```java
+// 1. Access dynamic datasets
+JSONArray options = getOptions(params);
+JSONObject optionParams = getOptionsParams(params);
+JSONObject locations = getLocations(params);
+
+// 2. Extract contextual variables
+JSONObject contextual_variables = optionParams.getJSONObject("contextual_variables");
+JSONObject randomisation = optionParams.getJSONObject("randomisation");
+
+// 3. Access offer matrix
+JSONObject offerMatrixWithKey = params.getJSONObject("offerMatrixWithKey");
+
+// 4. Process each option/offer
+for (int j : optionsSequence) {
+    JSONObject option = options.getJSONObject(j);
+    String offer = option.getString("optionKey");
+    
+    // Access offer details from matrix
+    if (offerMatrixWithKey.has(offer)) {
+        JSONObject singleOffer = offerMatrixWithKey.getJSONObject(offer);
+        // Modify pricing, scores, etc.
+    }
+}
+```
+
+### 4. Modifying Scores, Values, and Pricing
+
+**Score Modification Patterns:**
+```java
+// In post-score plugins, you can modify:
+finalOffersObject.put("score", p);                    // Raw model score
+finalOffersObject.put("modified_offer_score", p * ((double) offer_value - offer_cost));  // Business-adjusted score
+finalOffersObject.put("final_score", p);              // Final ranking score
+
+// Apply business logic to scores:
+double modified_offer_score = p * ((double) offer_value - offer_cost);
+// Or custom calculations:
+double modified_offer_score = calculateBusinessScore(p, offer_value, offer_cost, featuresObj);
+```
+
+**Pricing Modification:**
+```java
+// Access pricing from offer matrix
+double offer_value = 1.0;
+double offer_cost = 1.0;
+
+if (offerMatrixWithKey.has(offer)) {
+    JSONObject singleOffer = offerMatrixWithKey.getJSONObject(offer);
+    if (singleOffer.has("offer_price"))
+        offer_value = DataTypeConversions.getDouble(singleOffer, "offer_price");
+    if (singleOffer.has("price"))
+        offer_value = DataTypeConversions.getDouble(singleOffer, "price");
+    if (singleOffer.has("offer_cost"))
+        offer_cost = singleOffer.getDouble("offer_cost");
+    
+    // Modify pricing based on business rules
+    offer_value = applyPricingRules(offer_value, featuresObj, params);
+}
+
+finalOffersObject.put("offer_value", offer_value);
+finalOffersObject.put("price", offer_value);
+finalOffersObject.put("cost", offer_cost);
+```
+
+### 5. Common Data Structures
+
+**params Structure (Key Fields):**
+```java
+params.getJSONObject("in_params")              // Input parameters from API
+params.getJSONObject("featuresObj")            // Feature store data
+params.getJSONObject("offerMatrixWithKey")     // Offer matrix (pricing, costs)
+params.getInt("resultcount")                   // Number of results to return
+params.getInt("explore")                       // Exploration parameter (0-1)
+params.get("uuid")                             // Request UUID
+params.getJSONObject("mab")                     // Multi-Armed Bandit config
+```
+
+**predictModelMojoResult Structure:**
+```java
+predictModelMojoResult.getJSONObject("featuresObj")        // Features used for scoring
+predictModelMojoResult.getJSONObject("domainsProbabilityObj")  // Model probabilities
+predictModelMojoResult.get("type")                         // Model type (array or string)
+predictModelMojoResult.getJSONArray("final_result")        // Final offers (your output)
+```
+
+**Offer Object Structure (in final_result array):**
+```java
+{
+  "offer": "OFFER_KEY",                    // REQUIRED: Offer identifier
+  "offer_name": "Offer Name",              // REQUIRED: Display name
+  "score": 0.85,                           // REQUIRED: Base score
+  "modified_offer_score": 0.75,           // Business-adjusted score
+  "final_score": 0.75,                    // Final ranking score
+  "offer_value": 100.0,                    // Offer value/price
+  "price": 100.0,                          // Price
+  "cost": 50.0,                            // Cost
+  "uuid": "...",                           // Request UUID
+  // ... additional custom fields
+}
+```
+
+### 6. Best Practices
+
+**Error Handling:**
+- Always wrap risky operations in try-catch blocks
+- Log errors with UUID for traceability: `LOGGER.error("PluginName:E001:UUID: " + params.get("uuid") + " Error message")`
+- Return unmodified params/result on error (fail gracefully)
+- Use `has()` before `get()` for optional JSONObject keys
+
+**Performance:**
+- Minimize database calls (use provided sessions efficiently)
+- Cache frequently accessed data in params
+- Use `JSONArraySort.sortArray()` for sorting (provided utility)
+- Log execution time for performance monitoring
+
+**Code Organization:**
+- Keep business logic separate from data access
+- Use helper methods from super classes when available
+- Document custom calculations and business rules
+- Follow existing plugin patterns for consistency
+
+**Testing:**
+- Test with missing optional keys
+- Test with empty arrays/objects
+- Verify return structure matches contract
+- Test edge cases (null values, empty strings, zero scores)
+
+### 7. Anti-Patterns to Avoid
+
+**DO NOT:**
+- Change method signatures (name, parameters, return type)
+- Remove required keys from params or predictModelMojoResult
+- Break the structure of `final_result` array
+- Access database connections directly (use provided sessions)
+- Modify core platform classes (extend, don't modify)
+- Hardcode business logic that should be configurable
+- Skip calling `getTopScores()` in post-score plugins (if using MAB)
+- Return null (always return the input object, even if unmodified)
+
+**DO:**
+- Extend super classes (`PreScoreSuper`, `PostScoreSuper`)
+- Use provided helper methods
+- Preserve required data structures
+- Handle missing data gracefully
+- Log important operations
+- Follow existing plugin patterns
+
+### 8. Example Patterns
+
+**Pre-Score: Modifying Contextual Variables**
+```java
+public static JSONObject getPrePredict(JSONObject params, CqlSession session) {
+    JSONObject in_params = params.getJSONObject("in_params");
+    
+    // Modify contextual variables
+    if (!in_params.has("contextual_variable_one")) {
+        JSONObject featuresObj = params.getJSONObject("featuresObj");
+        if (featuresObj.has("customer_segment")) {
+            in_params.put("contextual_variable_one", featuresObj.getString("customer_segment"));
+        }
+    }
+    
+    params.put("in_params", in_params);
+    return params;
+}
+```
+
+**Post-Score: Adjusting Scores Based on Business Rules**
+```java
+public static JSONObject getPostPredict(JSONObject predictModelMojoResult, JSONObject params, 
+                                       CqlSession session, EasyPredictModelWrapper[] models) {
+    JSONArray finalOffers = new JSONArray();
+    JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
+    
+    // Process and modify offers
+    // ... your logic ...
+    
+    // Sort and set final result
+    JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "modified_offer_score", "double", "d");
+    predictModelMojoResult.put("final_result", sortJsonArray);
+    
+    // Apply top scores (MAB filtering)
+    predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+    
+    return predictModelMojoResult;
+}
+```
+
+### 9. Configuration
+
+Plugins are configured in `ecosystem.properties`:
+```properties
+plugin.prescore=com.ecosystem.plugin.customer.YourPreScoreClass
+plugin.postscore=com.ecosystem.plugin.customer.YourPostScoreClass
+```
+
+The runtime dynamically loads these classes at startup. Ensure:
+- Class is in classpath
+- Package name matches exactly
+- Class extends correct super class
+- Method signatures match exactly
+
+### 10. Code Safety and Breakage Prevention (CRITICAL)
+
+**When making ANY changes to plugin code, you MUST follow these rules to prevent breaking the runtime:**
+
+#### 10.1 Defensive Coding - Always Validate Before Access
+
+**NEVER access JSONObject/JSONArray without checking existence first:**
+
+```java
+// ❌ WRONG - Will throw JSONException if key doesn't exist
+String value = params.getString("optional_key");
+JSONObject obj = params.getJSONObject("optional_obj");
+
+// ✅ CORRECT - Always check first
+String value = null;
+if (params.has("optional_key")) {
+    value = params.getString("optional_key");
+}
+
+JSONObject obj = null;
+if (params.has("optional_obj") && !params.isNull("optional_obj")) {
+    obj = params.getJSONObject("optional_obj");
+}
+```
+
+**For nested access, check each level:**
+```java
+// ❌ WRONG
+String segment = params.getJSONObject("in_params").getString("segment");
+
+// ✅ CORRECT
+String segment = null;
+if (params.has("in_params")) {
+    JSONObject inParams = params.getJSONObject("in_params");
+    if (inParams != null && inParams.has("segment")) {
+        segment = inParams.getString("segment");
+    }
+}
+```
+
+#### 10.2 Null Safety - Never Assume Non-Null
+
+**ALWAYS handle null cases:**
+
+```java
+// ❌ WRONG
+JSONObject featuresObj = params.getJSONObject("featuresObj");
+String segment = featuresObj.getString("customer_segment");
+
+// ✅ CORRECT
+JSONObject featuresObj = null;
+if (params.has("featuresObj") && !params.isNull("featuresObj")) {
+    featuresObj = params.getJSONObject("featuresObj");
+    if (featuresObj != null && featuresObj.has("customer_segment")) {
+        String segment = featuresObj.optString("customer_segment", "DEFAULT");
+    }
+}
+```
+
+**Use optString/optInt/optDouble for safe access with defaults:**
+```java
+// ✅ PREFERRED - Returns default if missing
+String segment = featuresObj.optString("customer_segment", "DEFAULT");
+int count = params.optInt("resultcount", 1);
+double score = option.optDouble("arm_reward", 0.0);
+```
+
+#### 10.3 Array Safety - Always Check Bounds and Length
+
+**NEVER access arrays without bounds checking:**
+
+```java
+// ❌ WRONG
+JSONArray options = getOptions(params);
+JSONObject firstOption = options.getJSONObject(0);
+
+// ✅ CORRECT
+JSONArray options = getOptions(params);
+if (options != null && options.length() > 0) {
+    JSONObject firstOption = options.getJSONObject(0);
+}
+
+// ✅ CORRECT - Safe iteration
+if (options != null) {
+    for (int i = 0; i < options.length(); i++) {
+        try {
+            JSONObject option = options.getJSONObject(i);
+            // Process option
+        } catch (Exception e) {
+            LOGGER.warn("Skipping invalid option at index " + i + ": " + e.getMessage());
+            continue; // Skip this item, continue processing
+        }
+    }
+}
+```
+
+#### 10.4 Type Safety - Always Validate Types
+
+**Check types before casting or accessing:**
+
+```java
+// ❌ WRONG
+double score = (double) option.get("arm_reward");
+
+// ✅ CORRECT
+double score = 0.0;
+Object scoreObj = option.opt("arm_reward");
+if (scoreObj != null) {
+    if (scoreObj instanceof Number) {
+        score = ((Number) scoreObj).doubleValue();
+    } else if (scoreObj instanceof String) {
+        try {
+            score = Double.parseDouble((String) scoreObj);
+        } catch (NumberFormatException e) {
+            LOGGER.warn("Invalid score format: " + scoreObj);
+        }
+    }
+}
+```
+
+**Use DataTypeConversions utility when available:**
+```java
+// ✅ PREFERRED - Uses utility that handles type conversion safely
+double score = DataTypeConversions.getDouble(option, "arm_reward");
+int count = DataTypeConversions.getInt(params, "resultcount");
+```
+
+#### 10.5 Exception Handling - Wrap ALL Risky Operations
+
+**EVERY method that accesses external data MUST have try-catch:**
+
+```java
+// ✅ CORRECT - Complete error handling
+public static JSONObject getPostPredict(
+    JSONObject predictModelMojoResult, 
+    JSONObject params, 
+    CqlSession session, 
+    EasyPredictModelWrapper[] models
+) {
+    try {
+        // All your logic here
+        
+        // Validate inputs first
+        if (predictModelMojoResult == null) {
+            LOGGER.error("PluginName:E001: predictModelMojoResult is null");
+            return new JSONObject(); // Return empty, not null
+        }
+        
+        if (params == null) {
+            LOGGER.error("PluginName:E002: params is null");
+            return predictModelMojoResult; // Return unmodified
+        }
+        
+        // Your processing logic...
+        
+        return predictModelMojoResult;
+        
+    } catch (JSONException e) {
+        LOGGER.error("PluginName:E003:UUID: " + 
+                    (params != null ? params.optString("uuid", "unknown") : "unknown") + 
+                    " JSON error: " + e.getMessage());
+        return predictModelMojoResult != null ? predictModelMojoResult : new JSONObject();
+        
+    } catch (NullPointerException e) {
+        LOGGER.error("PluginName:E004:UUID: " + 
+                    (params != null ? params.optString("uuid", "unknown") : "unknown") + 
+                    " Null pointer: " + e.getMessage());
+        return predictModelMojoResult != null ? predictModelMojoResult : new JSONObject();
+        
+    } catch (Exception e) {
+        LOGGER.error("PluginName:E005:UUID: " + 
+                    (params != null ? params.optString("uuid", "unknown") : "unknown") + 
+                    " Unexpected error: " + e.getMessage(), e);
+        return predictModelMojoResult != null ? predictModelMojoResult : new JSONObject();
+    }
+}
+```
+
+#### 10.6 Preserve Existing Structure - Never Remove Required Fields
+
+**When modifying objects, preserve all existing fields:**
+
+```java
+// ❌ WRONG - Removes existing fields
+JSONObject newOffer = new JSONObject();
+newOffer.put("offer", offerKey);
+newOffer.put("score", score);
+// Missing: offer_name, uuid, etc.
+
+// ✅ CORRECT - Preserve existing, add/modify only what's needed
+JSONObject offerObj = new JSONObject();
+// Copy existing fields if they exist
+if (existingOffer.has("offer")) offerObj.put("offer", existingOffer.get("offer"));
+if (existingOffer.has("offer_name")) offerObj.put("offer_name", existingOffer.get("offer_name"));
+if (existingOffer.has("uuid")) offerObj.put("uuid", existingOffer.get("uuid"));
+
+// Add/modify your fields
+offerObj.put("score", newScore);
+offerObj.put("modified_offer_score", adjustedScore);
+```
+
+**For final_result array, ensure minimum required fields:**
+```java
+// ✅ CORRECT - Always include required fields
+JSONObject offerObj = new JSONObject();
+offerObj.put("offer", offerKey);           // REQUIRED
+offerObj.put("offer_name", offerName);    // REQUIRED
+offerObj.put("score", score);             // REQUIRED
+offerObj.put("uuid", params.optString("uuid", "")); // Preserve UUID
+// Add optional fields as needed
+```
+
+#### 10.7 Safe Modifications - Never Break Existing Functionality
+
+**When adding new logic, ensure it doesn't break existing paths:**
+
+```java
+// ❌ WRONG - Breaks if contextual_variable_one doesn't exist
+if (!work.has("contextual_variable_one")) {
+    work.put("contextual_variable_one", featuresObj.getString("customer_segment"));
+}
+
+// ✅ CORRECT - Safe with fallbacks
+if (!work.has("contextual_variable_one")) {
+    String segment = featuresObj.optString("customer_segment", "");
+    if (!segment.isEmpty()) {
+        work.put("contextual_variable_one", segment);
+    } else {
+        work.put("contextual_variable_one", "DEFAULT");
+    }
+}
+```
+
+**When modifying calculations, preserve original behavior as fallback:**
+```java
+// ✅ CORRECT - New logic with fallback to original
+double adjustedScore = baseScore; // Default to original
+
+try {
+    // Your new calculation
+    if (featuresObj.has("customer_segment")) {
+        String segment = featuresObj.getString("customer_segment");
+        if ("VIP".equals(segment)) {
+            adjustedScore = baseScore * 1.2;
+        }
+    }
+} catch (Exception e) {
+    LOGGER.warn("Score adjustment failed, using base score: " + e.getMessage());
+    adjustedScore = baseScore; // Fallback to original
+}
+```
+
+#### 10.8 Return Value Safety - Never Return Null
+
+**ALWAYS return a valid object, even on error:**
+
+```java
+// ❌ WRONG
+if (error) {
+    return null; // Breaks runtime
+}
+
+// ✅ CORRECT
+if (error) {
+    LOGGER.error("Error occurred, returning unmodified params");
+    return params; // Return input object, unmodified
+}
+
+// ✅ CORRECT - For post-score
+if (error) {
+    LOGGER.error("Error occurred, returning unmodified result");
+    return predictModelMojoResult != null ? predictModelMojoResult : new JSONObject();
+}
+```
+
+#### 10.9 Method Signature Preservation - NEVER Change
+
+**When user requests changes, NEVER modify method signatures:**
+
+```java
+// ❌ WRONG - User asks to add parameter
+public static JSONObject getPostPredict(
+    JSONObject predictModelMojoResult, 
+    JSONObject params, 
+    CqlSession session, 
+    EasyPredictModelWrapper[] models,
+    String newParameter  // BREAKS CONTRACT
+)
+
+// ✅ CORRECT - Extract from params instead
+public static JSONObject getPostPredict(
+    JSONObject predictModelMojoResult, 
+    JSONObject params, 
+    CqlSession session, 
+    EasyPredictModelWrapper[] models
+) {
+    // Extract new parameter from params
+    String newParameter = params.optString("new_parameter", "default");
+    // Use it in your logic
+}
+```
+
+#### 10.10 Data Type Conversions - Always Handle Safely
+
+**Use safe conversion utilities:**
+
+```java
+// ❌ WRONG - May throw exception
+double value = params.getDouble("some_key");
+int count = params.getInt("count");
+
+// ✅ CORRECT - Safe with defaults
+double value = params.optDouble("some_key", 0.0);
+int count = params.optInt("count", 1);
+
+// ✅ CORRECT - With validation
+Object valueObj = params.opt("some_key");
+double value = 0.0;
+if (valueObj != null) {
+    if (valueObj instanceof Number) {
+        value = ((Number) valueObj).doubleValue();
+    } else {
+        try {
+            value = Double.parseDouble(valueObj.toString());
+        } catch (NumberFormatException e) {
+            LOGGER.warn("Invalid double value: " + valueObj);
+        }
+    }
+}
+```
+
+#### 10.11 Helper Method Safety - Check Return Values
+
+**Always validate helper method returns:**
+
+```java
+// ❌ WRONG - Assumes non-null
+JSONArray options = getOptions(params);
+for (int i = 0; i < options.length(); i++) { ... }
+
+// ✅ CORRECT - Validate first
+JSONArray options = getOptions(params);
+if (options != null && options.length() > 0) {
+    for (int i = 0; i < options.length(); i++) {
+        try {
+            JSONObject option = options.getJSONObject(i);
+            if (option != null) {
+                // Process option
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Skipping invalid option: " + e.getMessage());
+            continue;
+        }
+    }
+} else {
+    LOGGER.warn("No options available, returning empty result");
+    // Return appropriate empty result
+}
+```
+
+#### 10.12 Modification Checklist - Before Making Changes
+
+**Before implementing ANY user request, verify:**
+
+- [ ] Method signature remains unchanged
+- [ ] All JSONObject access uses `has()` or `opt*()` methods
+- [ ] All array access checks length/bounds
+- [ ] All risky operations wrapped in try-catch
+- [ ] All return paths return valid objects (never null)
+- [ ] Required fields preserved in output
+- [ ] Error cases return unmodified input (graceful degradation)
+- [ ] New logic has fallback to original behavior
+- [ ] Type conversions use safe methods
+- [ ] Helper method returns validated before use
+- [ ] Logging added for error cases with UUID
+
+#### 10.13 Safe Modification Pattern Template
+
+**Use this template for safe modifications:**
+
+```java
+public static JSONObject getPostPredict(
+    JSONObject predictModelMojoResult, 
+    JSONObject params, 
+    CqlSession session, 
+    EasyPredictModelWrapper[] models
+) {
+    // 1. Validate inputs
+    if (predictModelMojoResult == null) {
+        LOGGER.error("PluginName:E001: predictModelMojoResult is null");
+        return new JSONObject();
+    }
+    if (params == null) {
+        LOGGER.error("PluginName:E002: params is null");
+        return predictModelMojoResult;
+    }
+    
+    try {
+        // 2. Safely extract required data
+        JSONObject featuresObj = null;
+        if (predictModelMojoResult.has("featuresObj") && 
+            !predictModelMojoResult.isNull("featuresObj")) {
+            featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
+        }
+        
+        if (featuresObj == null) {
+            LOGGER.warn("PluginName:W001: featuresObj is null, using defaults");
+            featuresObj = new JSONObject();
+        }
+        
+        // 3. Safely access optional data
+        JSONArray options = getOptions(params);
+        if (options == null || options.length() == 0) {
+            LOGGER.warn("PluginName:W002: No options available");
+            // Return existing result or empty result
+            if (!predictModelMojoResult.has("final_result")) {
+                predictModelMojoResult.put("final_result", new JSONArray());
+            }
+            return predictModelMojoResult;
+        }
+        
+        // 4. Process with error handling per item
+        JSONArray finalOffers = new JSONArray();
+        int offerIndex = 0;
+        
+        for (int i = 0; i < options.length() && i < params.optInt("resultcount", 10); i++) {
+            try {
+                JSONObject option = options.getJSONObject(i);
+                if (option == null) continue;
+                
+                // Your processing logic with safe access
+                String offerKey = option.optString("optionKey", "");
+                if (offerKey.isEmpty()) continue;
+                
+                double baseScore = option.optDouble("arm_reward", 0.0);
+                
+                // Your modifications here
+                double adjustedScore = baseScore; // Default
+                try {
+                    // New logic with fallback
+                    adjustedScore = calculateAdjustedScore(baseScore, featuresObj);
+                } catch (Exception e) {
+                    LOGGER.warn("Score adjustment failed for " + offerKey + 
+                               ", using base: " + e.getMessage());
+                    adjustedScore = baseScore; // Fallback
+                }
+                
+                // Create offer object with required fields
+                JSONObject offerObj = new JSONObject();
+                offerObj.put("offer", offerKey);
+                offerObj.put("offer_name", option.optString("option", offerKey));
+                offerObj.put("score", baseScore);
+                offerObj.put("modified_offer_score", adjustedScore);
+                offerObj.put("final_score", adjustedScore);
+                offerObj.put("uuid", params.optString("uuid", ""));
+                
+                finalOffers.put(offerIndex++, offerObj);
+                
+            } catch (Exception e) {
+                LOGGER.warn("PluginName:W003: Error processing option " + i + 
+                           ": " + e.getMessage());
+                continue; // Skip this item, continue processing
+            }
+        }
+        
+        // 5. Set final result
+        if (finalOffers.length() > 0) {
+            JSONArray sorted = JSONArraySort.sortArray(finalOffers, 
+                                                       "modified_offer_score", 
+                                                       "double", "d");
+            predictModelMojoResult.put("final_result", sorted);
+        } else {
+            predictModelMojoResult.put("final_result", new JSONArray());
+        }
+        
+        // 6. Apply MAB filtering if needed
+        try {
+            predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+        } catch (Exception e) {
+            LOGGER.warn("PluginName:W004: getTopScores failed: " + e.getMessage());
+            // Continue with result as-is
+        }
+        
+        return predictModelMojoResult;
+        
+    } catch (Exception e) {
+        LOGGER.error("PluginName:E999:UUID: " + 
+                    params.optString("uuid", "unknown") + 
+                    " Unexpected error: " + e.getMessage(), e);
+        // Return unmodified result on error
+        if (!predictModelMojoResult.has("final_result")) {
+            predictModelMojoResult.put("final_result", new JSONArray());
+        }
+        return predictModelMojoResult;
+    }
+}
+```
+
+### 11. Code Migration Rules (CRITICAL)
+
+**When migrating code from old implementations to the new postscore approach, you MUST follow these rules:**
+
+#### 11.1 Class Naming Strategy
+
+**ALWAYS preserve the original class name when migrating:**
+
+```java
+// ✅ CORRECT - Use same name as original
+// Original: PostScoreEStoreNonGSM
+// Migrated: PostScoreEStoreNonGSM (same name)
+
+// ✅ CORRECT - If class already exists with new approach, add version suffix
+// Original: PostScoreBasic
+// Existing: PostScoreBasic (already follows new approach)
+// New migrated version: PostScoreBasicV2 (or PostScoreBasicV3, etc.)
+```
+
+**Naming Rules:**
+- **First migration:** Use the exact same class name as the original
+- **Subsequent migrations:** If a class with that name already exists and follows the new approach, add a version suffix (`V2`, `V3`, etc.)
+- **Version suffix format:** Use `V` followed by a number (e.g., `PostScoreBasicV2`, `PostScoreBasicV3`)
+- **Check for existing classes:** Before creating, verify if a class with the same name already exists in the codebase
+
+#### 11.2 Migration Compliance Checklist
+
+**When migrating old code to the new postscore approach, you MUST ensure ALL of the following:**
+
+**✅ Defensive Coding:**
+- [ ] Replace all direct `getJSONObject()` calls with `has()` checks first
+- [ ] Replace all `getString()`, `getInt()`, `getDouble()` with `optString()`, `optInt()`, `optDouble()` where appropriate
+- [ ] Add null checks before accessing nested objects
+- [ ] Use `DataTypeConversions` utility for safe type conversions
+
+**✅ Input Validation:**
+- [ ] Add null checks for `predictModelMojoResult` and `params` at method start
+- [ ] Validate `featuresObj` exists and is not null before use
+- [ ] Check array length before accessing elements
+- [ ] Validate helper method returns (e.g., `getOptions()`, `getOptionsParams()`)
+
+**✅ Error Handling:**
+- [ ] Wrap entire method body in try-catch
+- [ ] Add specific catch blocks for `JSONException`, `NullPointerException`, and general `Exception`
+- [ ] All catch blocks must return valid objects (never null)
+- [ ] Log errors with UUID: `LOGGER.error("ClassName:E###:UUID: " + uuid + " Error message")`
+- [ ] Use error codes (E001, E002, etc.) for traceability
+
+**✅ Safe Iteration:**
+- [ ] Check array/collection is not null and has length > 0 before iterating
+- [ ] Wrap individual item processing in try-catch
+- [ ] Use `continue` to skip invalid items rather than breaking entire loop
+- [ ] Log warnings for skipped items
+
+**✅ Return Value Safety:**
+- [ ] Never return null - always return input object (modified or unmodified)
+- [ ] Ensure `final_result` array exists in result (create empty array if needed)
+- [ ] Call `getTopScores()` before returning (if using MAB)
+- [ ] Preserve all required fields in offer objects
+
+**✅ Structure Preservation:**
+- [ ] Preserve existing fields when modifying objects
+- [ ] Maintain required fields: `offer`, `offer_name`, `score`, `uuid`
+- [ ] Don't remove fields that existed in original implementation
+- [ ] Add new fields without breaking existing structure
+
+**✅ Method Signature:**
+- [ ] NEVER change method signature (name, parameters, return type)
+- [ ] Extract new parameters from `params` JSONObject instead of adding method parameters
+- [ ] Maintain exact parameter order and types
+
+#### 11.3 Migration Pattern Template
+
+**Use this template when migrating old code:**
+
+```java
+public static JSONObject getPostPredict(
+    JSONObject predictModelMojoResult, 
+    JSONObject params, 
+    CqlSession session, 
+    EasyPredictModelWrapper[] models
+) {
+    double startTimePost = System.nanoTime();
+    
+    // 1. Validate inputs (REQUIRED)
+    if (predictModelMojoResult == null) {
+        LOGGER.error("ClassName:E001: predictModelMojoResult is null");
+        return new JSONObject();
+    }
+    if (params == null) {
+        LOGGER.error("ClassName:E002: params is null");
+        return predictModelMojoResult;
+    }
+    
+    try {
+        // 2. Safely extract required data (REQUIRED)
+        JSONObject featuresObj = null;
+        if (predictModelMojoResult.has("featuresObj") && 
+            !predictModelMojoResult.isNull("featuresObj")) {
+            featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
+        }
+        
+        if (featuresObj == null) {
+            LOGGER.warn("ClassName:W001: featuresObj is null, using defaults");
+            featuresObj = new JSONObject();
+        }
+        
+        // 3. Safely access optional data (REQUIRED)
+        JSONArray options = getOptions(params);
+        if (options == null || options.length() == 0) {
+            LOGGER.warn("ClassName:W002: No options available");
+            if (!predictModelMojoResult.has("final_result")) {
+                predictModelMojoResult.put("final_result", new JSONArray());
+            }
+            predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+            return predictModelMojoResult;
+        }
+        
+        // 4. Process with error handling per item (REQUIRED)
+        JSONArray finalOffers = new JSONArray();
+        int offerIndex = 0;
+        
+        for (int i = 0; i < options.length() && i < params.optInt("resultcount", 10); i++) {
+            try {
+                JSONObject option = options.getJSONObject(i);
+                if (option == null) continue;
+                
+                // Your migrated business logic here
+                // Use safe access patterns: optString(), optDouble(), has(), etc.
+                
+                // Create offer object with required fields
+                JSONObject offerObj = new JSONObject();
+                offerObj.put("offer", offerKey);
+                offerObj.put("offer_name", option.optString("option", offerKey));
+                offerObj.put("score", baseScore);
+                offerObj.put("modified_offer_score", adjustedScore);
+                offerObj.put("final_score", adjustedScore);
+                offerObj.put("uuid", params.optString("uuid", ""));
+                
+                finalOffers.put(offerIndex++, offerObj);
+                
+            } catch (Exception e) {
+                LOGGER.warn("ClassName:W003: Error processing option " + i + 
+                           ": " + e.getMessage());
+                continue; // Skip this item, continue processing
+            }
+        }
+        
+        // 5. Set final result (REQUIRED)
+        if (finalOffers.length() > 0) {
+            JSONArray sorted = JSONArraySort.sortArray(finalOffers, 
+                                                       "modified_offer_score", 
+                                                       "double", "d");
+            predictModelMojoResult.put("final_result", sorted);
+        } else {
+            predictModelMojoResult.put("final_result", new JSONArray());
+        }
+        
+        // 6. Apply MAB filtering (REQUIRED if using MAB)
+        try {
+            predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+        } catch (Exception e) {
+            LOGGER.warn("ClassName:W004: getTopScores failed: " + e.getMessage());
+            // Continue with result as-is
+        }
+        
+        double endTimePost = System.nanoTime();
+        LOGGER.info("ClassName:I001: execution time in ms: " + 
+                   String.valueOf((endTimePost - startTimePost) / 1000000));
+        
+        return predictModelMojoResult;
+        
+    } catch (JSONException e) {
+        LOGGER.error("ClassName:E003:UUID: " + 
+                    params.optString("uuid", "unknown") + 
+                    " JSON error: " + e.getMessage());
+        if (!predictModelMojoResult.has("final_result")) {
+            predictModelMojoResult.put("final_result", new JSONArray());
+        }
+        return predictModelMojoResult;
+        
+    } catch (NullPointerException e) {
+        LOGGER.error("ClassName:E004:UUID: " + 
+                    params.optString("uuid", "unknown") + 
+                    " Null pointer: " + e.getMessage());
+        if (!predictModelMojoResult.has("final_result")) {
+            predictModelMojoResult.put("final_result", new JSONArray());
+        }
+        return predictModelMojoResult;
+        
+    } catch (Exception e) {
+        LOGGER.error("ClassName:E999:UUID: " + 
+                    params.optString("uuid", "unknown") + 
+                    " Unexpected error: " + e.getMessage(), e);
+        if (!predictModelMojoResult.has("final_result")) {
+            predictModelMojoResult.put("final_result", new JSONArray());
+        }
+        return predictModelMojoResult;
+    }
+}
+```
+
+#### 11.4 Common Migration Transformations
+
+**Transform old patterns to new safe patterns:**
+
+```java
+// ❌ OLD - Direct access
+JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
+String segment = featuresObj.getString("customer_segment");
+
+// ✅ NEW - Safe access
+JSONObject featuresObj = null;
+if (predictModelMojoResult.has("featuresObj") && 
+    !predictModelMojoResult.isNull("featuresObj")) {
+    featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
+}
+String segment = featuresObj != null ? featuresObj.optString("customer_segment", "") : "";
+
+// ❌ OLD - Direct array access
+JSONArray options = getOptions(params);
+for (int i = 0; i < options.length(); i++) {
+    JSONObject option = options.getJSONObject(i);
+}
+
+// ✅ NEW - Safe array iteration
+JSONArray options = getOptions(params);
+if (options != null && options.length() > 0) {
+    for (int i = 0; i < options.length(); i++) {
+        try {
+            JSONObject option = options.getJSONObject(i);
+            if (option == null) continue;
+            // Process option
+        } catch (Exception e) {
+            LOGGER.warn("Error processing option " + i + ": " + e.getMessage());
+            continue;
+        }
+    }
+}
+
+// ❌ OLD - Direct type access
+double score = (double) option.get("arm_reward");
+int count = params.getInt("resultcount");
+
+// ✅ NEW - Safe type conversion
+double score = option.optDouble("arm_reward", 0.0);
+int count = params.optInt("resultcount", 1);
+// OR use utility:
+double score = DataTypeConversions.getDouble(option, "arm_reward");
+int count = DataTypeConversions.getInt(params, "resultcount");
+```
+
+#### 11.5 Migration Verification Steps
+
+**Before completing a migration, verify:**
+
+1. **Class Name:**
+   - [ ] Original class name preserved (or version suffix added if exists)
+   - [ ] Class extends `PostScoreSuper`
+   - [ ] Package name matches original location
+
+2. **Method Signature:**
+   - [ ] Method name is exactly `getPostPredict`
+   - [ ] Parameters match exactly: `(JSONObject predictModelMojoResult, JSONObject params, CqlSession session, EasyPredictModelWrapper[] models)`
+   - [ ] Return type is `JSONObject`
+   - [ ] Method is `public static`
+
+3. **Safety Compliance:**
+   - [ ] All JSONObject access uses `has()` or `opt*()` methods
+   - [ ] All array access checks bounds/length
+   - [ ] All risky operations wrapped in try-catch
+   - [ ] Input validation at method start
+   - [ ] Never returns null
+
+4. **Business Logic:**
+   - [ ] Original business logic preserved (with safe access patterns)
+   - [ ] Required fields maintained in output
+   - [ ] `getTopScores()` called before return (if using MAB)
+   - [ ] `final_result` array properly set
+
+5. **Error Handling:**
+   - [ ] Comprehensive try-catch blocks
+   - [ ] Error logging with UUID
+   - [ ] Graceful degradation (returns unmodified input on error)
+
+#### 11.6 Migration Workflow
+
+**When user requests migration from old to new:**
+
+1. **Identify source class:**
+   - Locate the original class file
+   - Understand its business logic and purpose
+   - Note any special requirements or dependencies
+
+2. **Check for existing migrated version:**
+   - Search codebase for class with same name
+   - If exists and follows new approach: use version suffix (V2, V3, etc.)
+   - If doesn't exist: use original name
+
+3. **Apply migration template:**
+   - Start with template from section 11.3
+   - Migrate business logic with safe access patterns
+   - Preserve all original functionality
+   - Add defensive coding throughout
+
+4. **Verify compliance:**
+   - Run through checklist in section 11.2
+   - Verify method signature unchanged
+   - Test error handling paths
+   - Ensure required fields preserved
+
+5. **Document migration:**
+   - Add comment in class header noting migration
+   - Document any behavioral changes (if any)
+   - Note version if applicable
+
+### 12. Migration to Dynamic Engagement Approach (CRITICAL)
+
+**When a user requests to migrate a postscore plugin to use the dynamic engagement approach, you MUST follow these rules:**
+
+#### 12.1 Understanding Dynamic vs Custom Approaches
+
+**Dynamic Approach Characteristics:**
+- Uses `PlatformDynamicEngagement` or `PlatformDynamicEngagementProduct` as the base pattern
+- Iterates over dynamic options using `generateOptionsSequence()` pattern
+- Uses contextual variables from `optionParams`
+- Accesses MAB (Multi-Armed Bandit) fields: `arm_reward`, `alpha`, `beta`, `learning_reward`
+- Uses `compareContextualVariableValues()` for filtering
+- Supports eligibility lists and location-based filtering
+
+**Custom/Recommender Approach Characteristics:**
+- May iterate directly over `final_result` array or model predictions
+- May use `domainsProbabilityObj` from model scoring
+- Custom scoring logic without MAB integration
+- May not use contextual variables or dynamic options
+
+#### 12.2 Base Class Selection
+
+**Choose the appropriate base class:**
+
+- **Use `PlatformDynamicEngagement`** when:
+  - No product-specific data structure needed
+  - Standard dynamic engagement pattern is sufficient
+  - Location/time-based eligibility is needed
+
+- **Use `PlatformDynamicEngagementProduct`** when:
+  - Product data structure needs to be included in response
+  - Product-specific fields need to be added to offer objects
+  - Additional product metadata is required
+
+#### 12.3 Loop Pattern Transformation
+
+**CRITICAL: The loop pattern MUST change from custom iteration to dynamic sequence pattern:**
+
+```java
+// ❌ OLD - Custom iteration (DO NOT USE)
+JSONArray results = predictModelMojoResult.getJSONArray("final_result");
+for (int i = 0; i < results.length(); i++) {
+    JSONObject offer = results.getJSONObject(i);
+    // Process offer
+}
+
+// OR
+JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
+for (String key : domainsProbabilityObj.keySet()) {
+    // Process by key
+}
+
+// ✅ NEW - Dynamic sequence pattern (REQUIRED)
+JSONArray options = getOptions(params);
+int[] optionsSequence = generateOptionsSequence(options.length(), options.length());
+for (int j : optionsSequence) {
+    if (j > params.optInt("resultcount", 10)) break;
+    
+    JSONObject option = options.getJSONObject(j);
+    String offer = option.optString("optionKey", "");
+    // Process option
+}
+```
+
+#### 12.4 Required Dynamic Setup Pattern
+
+**ALWAYS include this setup at the start of the method (after input validation):**
+
+```java
+// 1. Access dynamic datasets (REQUIRED)
+JSONArray options = getOptions(params);
+JSONObject optionParams = getOptionsParams(params);
+JSONObject locations = getLocations(params);
+
+// 2. Extract contextual variables (REQUIRED)
+JSONObject contextual_variables = null;
+if (optionParams != null && optionParams.has("contextual_variables")) {
+    contextual_variables = optionParams.getJSONObject("contextual_variables");
+}
+
+JSONObject randomisation = null;
+if (optionParams != null && optionParams.has("randomisation")) {
+    randomisation = optionParams.getJSONObject("randomisation");
+}
+
+// 3. Get work object (in_params)
+JSONObject work = null;
+if (params.has("in_params") && !params.isNull("in_params")) {
+    work = params.getJSONObject("in_params");
+} else {
+    work = new JSONObject();
+    params.put("in_params", work);
+}
+
+// 4. Populate contextual variables from feature store (REQUIRED)
+if (contextual_variables != null) {
+    if (!work.has("contextual_variable_one") && contextual_variables.has("contextual_variable_one_name")) {
+        String cv1Name = contextual_variables.optString("contextual_variable_one_name", "");
+        if (!cv1Name.isEmpty() && featuresObj.has(cv1Name)) {
+            work.put("contextual_variable_one", featuresObj.opt(cv1Name));
+        } else {
+            work.put("contextual_variable_one", "");
+        }
+    }
+    
+    if (!work.has("contextual_variable_two") && contextual_variables.has("contextual_variable_two_name")) {
+        String cv2Name = contextual_variables.optString("contextual_variable_two_name", "");
+        if (!cv2Name.isEmpty() && featuresObj.has(cv2Name)) {
+            work.put("contextual_variable_two", featuresObj.opt(cv2Name));
+        } else {
+            work.put("contextual_variable_two", "");
+        }
+    }
+}
+
+// 5. Extract contextual variable values (REQUIRED)
+String contextual_variable_one = work.optString("contextual_variable_one", "");
+String contextual_variable_two = work.optString("contextual_variable_two", "");
+
+// 6. Generate options sequence (REQUIRED)
+int[] optionsSequence = generateOptionsSequence(
+    options != null ? options.length() : 0, 
+    options != null ? options.length() : 0
+);
+
+// 7. Get explore parameter (REQUIRED)
+int explore = params.optInt("explore", 0);
+```
+
+#### 12.5 Offer Processing Pattern
+
+**Transform offer processing to use dynamic option structure:**
+
+```java
+// ✅ CORRECT - Dynamic offer processing pattern
+for (int j : optionsSequence) {
+    if (j > params.optInt("resultcount", 10)) break;
+    
+    try {
+        // Get option safely
+        if (options == null || j >= options.length()) continue;
+        JSONObject option = options.getJSONObject(j);
+        if (option == null) continue;
+        
+        // Get offer key
+        String offer = option.optString("optionKey", "");
+        if (offer.isEmpty()) continue;
+        
+        // Handle default offer if not in matrix
+        if (offerMatrixWithKey != null && !offerMatrixWithKey.has(offer)) {
+            JSONObject singleOffer = defaultOffer(offer);
+            offerMatrixWithKey.put(offer, singleOffer);
+            LOGGER.warn("ClassName:W001: Default offer generated for: " + offer);
+        }
+        
+        // Check eligibility (if using eligibility list)
+        boolean eligibility_from_params = true;
+        if (check_eligibility_list && eligibility_list != null) {
+            eligibility_from_params = eligibility_list.has(offer);
+        }
+        
+        // Filter using contextual variables (REQUIRED)
+        if (compareContextualVariableValues(option, work) && eligibility_from_params) {
+            
+            // Extract MAB fields from option (REQUIRED)
+            double alpha = DataTypeConversions.getDoubleFromIntLong(option.opt("alpha"));
+            double beta = DataTypeConversions.getDoubleFromIntLong(option.opt("beta"));
+            double p = option.optDouble("arm_reward", 0.001);
+            double arm_reward = p;
+            double learning_reward = option.optDouble("learning_reward", 1.0);
+            
+            // Validate NaN values
+            if (Double.isNaN(p)) p = 0.0;
+            if (Double.isNaN(alpha)) alpha = 0.0;
+            if (Double.isNaN(beta)) beta = 0.0;
+            if (Double.isNaN(arm_reward)) arm_reward = 0.0;
+            
+            // Get pricing from offer matrix
+            double offer_value = 1.0;
+            double offer_cost = 1.0;
+            double modified_offer_score = p;
+            
+            if (offerMatrixWithKey != null && offerMatrixWithKey.has(offer)) {
+                JSONObject singleOffer = offerMatrixWithKey.getJSONObject(offer);
+                if (singleOffer.has("offer_price")) {
+                    offer_value = DataTypeConversions.getDouble(singleOffer, "offer_price");
+                } else if (singleOffer.has("price")) {
+                    offer_value = DataTypeConversions.getDouble(singleOffer, "price");
+                }
+                
+                if (singleOffer.has("offer_cost")) {
+                    offer_cost = DataTypeConversions.getDouble(singleOffer, "offer_cost");
+                } else if (singleOffer.has("cost")) {
+                    offer_cost = DataTypeConversions.getDouble(singleOffer, "cost");
+                }
+                
+                modified_offer_score = p * (offer_value - offer_cost);
+            }
+            
+            // Create final offer object with ALL required fields
+            JSONObject finalOffersObject = new JSONObject();
+            finalOffersObject.put("offer", offer);
+            finalOffersObject.put("offer_name", offer);
+            finalOffersObject.put("offer_name_desc", option.optString("option", offer));
+            finalOffersObject.put("score", p);
+            finalOffersObject.put("final_score", p);
+            finalOffersObject.put("modified_offer_score", modified_offer_score);
+            finalOffersObject.put("offer_value", offer_value);
+            finalOffersObject.put("price", offer_value);
+            finalOffersObject.put("cost", offer_cost);
+            finalOffersObject.put("p", p);
+            finalOffersObject.put("alpha", alpha);
+            finalOffersObject.put("beta", beta);
+            finalOffersObject.put("arm_reward", arm_reward);
+            finalOffersObject.put("learning_reward", learning_reward);
+            finalOffersObject.put("explore", explore);
+            finalOffersObject.put("uuid", params.optString("uuid", ""));
+            finalOffersObject.put("contextual_variable_one", contextual_variable_one);
+            finalOffersObject.put("contextual_variable_two", contextual_variable_two);
+            
+            // Optional MAB debugging fields
+            finalOffersObject.put("weighting", option.optDouble("weighting", -1.0));
+            finalOffersObject.put("expected_takeup", option.optDouble("expected_takeup", -1.0));
+            finalOffersObject.put("propensity", option.optDouble("propensity", -1.0));
+            finalOffersObject.put("epsilon_nominated", option.optDouble("epsilon_nominated", -1.0));
+            
+            // For PlatformDynamicEngagementProduct, add product data
+            if (offerMatrixWithKey != null && offerMatrixWithKey.has(offer)) {
+                JSONObject product = offerMatrixWithKey.getJSONObject(offer);
+                finalOffersObject.put("product", product);
+            }
+            
+            finalOffers.put(offerIndex++, finalOffersObject);
+        }
+        
+    } catch (Exception e) {
+        LOGGER.warn("ClassName:W002: Error processing option " + j + ": " + e.getMessage());
+        continue;
+    }
+}
+```
+
+#### 12.6 Business Logic Preservation
+
+**When migrating custom business logic:**
+
+1. **Extract business logic into conditional blocks within the dynamic loop:**
+   ```java
+   if (compareContextualVariableValues(option, work) && eligibility_from_params) {
+       // Your original business logic here
+       // Adapt to use 'option' instead of original data source
+       // Use 'featuresObj' for feature store data
+       // Use 'work' for input parameters
+       
+       // Example: Custom scoring adjustment
+       if (featuresObj.has("customer_segment")) {
+           String segment = featuresObj.optString("customer_segment", "");
+           if ("VIP".equals(segment)) {
+               p = p * 1.2; // Boost score for VIP
+           }
+       }
+   }
+   ```
+
+2. **Preserve custom calculations but adapt data sources:**
+   - Replace direct array access with `option` object access
+   - Replace model prediction access with `arm_reward` from option
+   - Use `featuresObj` for feature store data
+   - Use `work` (in_params) for input parameters
+
+3. **Maintain custom filtering but combine with contextual variable filtering:**
+   ```java
+   // Custom eligibility check
+   boolean customEligible = checkCustomEligibility(option, featuresObj);
+   
+   // Combine with dynamic filtering
+   if (compareContextualVariableValues(option, work) && eligibility_from_params && customEligible) {
+       // Process offer
+   }
+   ```
+
+#### 12.7 Sorting and Final Result
+
+**Use dynamic sorting pattern:**
+
+```java
+// Sort by arm_reward (MAB score) - REQUIRED for dynamic approach
+JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
+predictModelMojoResult.put("final_result", sortJsonArray);
+
+// Apply top scores (MAB filtering) - REQUIRED
+predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+
+// For PlatformDynamicEngagementProduct, add data section
+predictModelMojoResult.put("data", new JSONObject().put("featuresObj", featuresObj));
+```
+
+#### 12.8 Migration Checklist for Dynamic Approach
+
+**When migrating to dynamic engagement, verify:**
+
+- [ ] Base class selected: `PlatformDynamicEngagement` or `PlatformDynamicEngagementProduct`
+- [ ] Loop uses `generateOptionsSequence()` pattern (not custom iteration)
+- [ ] Dynamic setup included: `getOptions()`, `getOptionsParams()`, `getLocations()`
+- [ ] Contextual variables extracted and populated in `work` object
+- [ ] Options sequence generated: `generateOptionsSequence()`
+- [ ] Filtering uses `compareContextualVariableValues(option, work)`
+- [ ] MAB fields extracted: `alpha`, `beta`, `arm_reward`, `learning_reward`
+- [ ] Offer processing uses `option.getJSONObject(j)` pattern
+- [ ] Default offer generation for missing offers in matrix
+- [ ] Eligibility list support (if needed)
+- [ ] Location/time filtering (if using `PlatformDynamicEngagement`)
+- [ ] Sorting by `arm_reward` (not custom score)
+- [ ] `getTopScores()` called before return
+- [ ] All required MAB fields included in final offer objects
+- [ ] Business logic preserved and adapted to use `option` object
+- [ ] Safe access patterns used throughout (has(), optString(), etc.)
+- [ ] Error handling per option item (try-catch in loop)
+
+#### 12.9 Complete Dynamic Migration Template
+
+**Use this complete template when migrating to dynamic approach:**
+
+```java
+public static JSONObject getPostPredict(
+    JSONObject predictModelMojoResult, 
+    JSONObject params, 
+    CqlSession session, 
+    EasyPredictModelWrapper[] models
+) {
+    double startTimePost = System.nanoTime();
+    
+    // 1. Input validation (REQUIRED)
+    if (predictModelMojoResult == null) {
+        LOGGER.error("ClassName:E001: predictModelMojoResult is null");
+        return new JSONObject();
+    }
+    if (params == null) {
+        LOGGER.error("ClassName:E002: params is null");
+        return predictModelMojoResult;
+    }
+    
+    try {
+        // 2. Extract featuresObj (REQUIRED)
+        JSONObject featuresObj = null;
+        if (predictModelMojoResult.has("featuresObj") && 
+            !predictModelMojoResult.isNull("featuresObj")) {
+            featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
+        }
+        if (featuresObj == null) {
+            featuresObj = new JSONObject();
+        }
+        
+        // 3. Get offer matrix (REQUIRED)
+        JSONObject offerMatrixWithKey = new JSONObject();
+        boolean om = false;
+        if (params.has("offerMatrixWithKey") && !params.isNull("offerMatrixWithKey")) {
+            offerMatrixWithKey = params.getJSONObject("offerMatrixWithKey");
+            om = true;
+        }
+        
+        // 4. Get work object (REQUIRED)
+        JSONObject work = null;
+        if (params.has("in_params") && !params.isNull("in_params")) {
+            work = params.getJSONObject("in_params");
+        } else {
+            work = new JSONObject();
+            params.put("in_params", work);
+        }
+        
+        // 5. Access dynamic datasets (REQUIRED)
+        JSONArray options = getOptions(params);
+        JSONObject optionParams = getOptionsParams(params);
+        JSONObject locations = getLocations(params);
+        
+        if (options == null || options.length() == 0) {
+            LOGGER.warn("ClassName:W001: No options available");
+            if (!predictModelMojoResult.has("final_result")) {
+                predictModelMojoResult.put("final_result", new JSONArray());
+            }
+            predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+            return predictModelMojoResult;
+        }
+        
+        // 6. Extract contextual variables (REQUIRED)
+        JSONObject contextual_variables = null;
+        JSONObject randomisation = null;
+        if (optionParams != null) {
+            if (optionParams.has("contextual_variables")) {
+                contextual_variables = optionParams.getJSONObject("contextual_variables");
+            }
+            if (optionParams.has("randomisation")) {
+                randomisation = optionParams.getJSONObject("randomisation");
+            }
+        }
+        
+        // 7. Populate contextual variables (REQUIRED)
+        if (contextual_variables != null) {
+            if (!work.has("contextual_variable_one") && 
+                contextual_variables.has("contextual_variable_one_name")) {
+                String cv1Name = contextual_variables.optString("contextual_variable_one_name", "");
+                if (!cv1Name.isEmpty() && featuresObj.has(cv1Name)) {
+                    work.put("contextual_variable_one", featuresObj.opt(cv1Name));
+                } else {
+                    work.put("contextual_variable_one", "");
+                }
+            }
+            if (!work.has("contextual_variable_two") && 
+                contextual_variables.has("contextual_variable_two_name")) {
+                String cv2Name = contextual_variables.optString("contextual_variable_two_name", "");
+                if (!cv2Name.isEmpty() && featuresObj.has(cv2Name)) {
+                    work.put("contextual_variable_two", featuresObj.opt(cv2Name));
+                } else {
+                    work.put("contextual_variable_two", "");
+                }
+            }
+        }
+        
+        // 8. Extract contextual variable values (REQUIRED)
+        String contextual_variable_one = work.optString("contextual_variable_one", "");
+        String contextual_variable_two = work.optString("contextual_variable_two", "");
+        
+        // 9. Check eligibility list (if needed)
+        boolean check_eligibility_list = false;
+        JSONObject eligibility_list = new JSONObject();
+        if (work.has("eligible_offers")) {
+            try {
+                eligibility_list = work.getJSONObject("eligible_offers");
+                if (eligibility_list != null && !eligibility_list.isEmpty()) {
+                    check_eligibility_list = true;
+                }
+            } catch (Exception e) {
+                LOGGER.warn("ClassName:W002: Error extracting eligibility list: " + e.getMessage());
+            }
+        }
+        
+        // 10. Generate options sequence (REQUIRED)
+        int explore = params.optInt("explore", 0);
+        int[] optionsSequence = generateOptionsSequence(options.length(), options.length());
+        
+        // 11. Process options (REQUIRED)
+        JSONArray finalOffers = new JSONArray();
+        int offerIndex = 0;
+        
+        for (int j : optionsSequence) {
+            if (j > params.optInt("resultcount", 10)) break;
+            
+            try {
+                if (j >= options.length()) continue;
+                JSONObject option = options.getJSONObject(j);
+                if (option == null) continue;
+                
+                String offer = option.optString("optionKey", "");
+                if (offer.isEmpty()) continue;
+                
+                // Handle default offer
+                if (!offerMatrixWithKey.has(offer)) {
+                    JSONObject singleOffer = defaultOffer(offer);
+                    offerMatrixWithKey.put(offer, singleOffer);
+                    LOGGER.warn("ClassName:W003: Default offer generated: " + offer);
+                }
+                
+                // Location/time filtering (if using PlatformDynamicEngagement)
+                // Add location filtering logic here if needed
+                
+                // Eligibility check
+                boolean eligibility_from_params = true;
+                if (check_eligibility_list) {
+                    eligibility_from_params = eligibility_list.has(offer);
+                }
+                
+                // Contextual variable filtering (REQUIRED)
+                if (compareContextualVariableValues(option, work) && eligibility_from_params) {
+                    
+                    // Extract MAB fields (REQUIRED)
+                    double alpha = DataTypeConversions.getDoubleFromIntLong(option.opt("alpha"));
+                    double beta = DataTypeConversions.getDoubleFromIntLong(option.opt("beta"));
+                    double p = option.optDouble("arm_reward", 0.001);
+                    double arm_reward = p;
+                    double learning_reward = option.optDouble("learning_reward", 1.0);
+                    
+                    // Validate NaN
+                    if (Double.isNaN(p)) p = 0.0;
+                    if (Double.isNaN(alpha)) alpha = 0.0;
+                    if (Double.isNaN(beta)) beta = 0.0;
+                    if (Double.isNaN(arm_reward)) arm_reward = 0.0;
+                    
+                    // Get pricing
+                    double offer_value = 1.0;
+                    double offer_cost = 1.0;
+                    double modified_offer_score = p;
+                    
+                    if (om && offerMatrixWithKey.has(offer)) {
+                        JSONObject singleOffer = offerMatrixWithKey.getJSONObject(offer);
+                        if (singleOffer.has("offer_price")) {
+                            offer_value = DataTypeConversions.getDouble(singleOffer, "offer_price");
+                        } else if (singleOffer.has("price")) {
+                            offer_value = DataTypeConversions.getDouble(singleOffer, "price");
+                        }
+                        if (singleOffer.has("offer_cost")) {
+                            offer_cost = DataTypeConversions.getDouble(singleOffer, "offer_cost");
+                        } else if (singleOffer.has("cost")) {
+                            offer_cost = DataTypeConversions.getDouble(singleOffer, "cost");
+                        }
+                        modified_offer_score = p * (offer_value - offer_cost);
+                    }
+                    
+                    // YOUR CUSTOM BUSINESS LOGIC HERE
+                    // Adapt original logic to use: option, featuresObj, work
+                    // Example:
+                    // if (featuresObj.has("customer_segment")) {
+                    //     String segment = featuresObj.optString("customer_segment", "");
+                    //     if ("VIP".equals(segment)) {
+                    //         p = p * 1.2;
+                    //         modified_offer_score = p * (offer_value - offer_cost);
+                    //     }
+                    // }
+                    
+                    // Create final offer object (REQUIRED)
+                    JSONObject finalOffersObject = new JSONObject();
+                    finalOffersObject.put("offer", offer);
+                    finalOffersObject.put("offer_name", offer);
+                    finalOffersObject.put("offer_name_desc", option.optString("option", offer));
+                    finalOffersObject.put("score", p);
+                    finalOffersObject.put("final_score", p);
+                    finalOffersObject.put("modified_offer_score", modified_offer_score);
+                    finalOffersObject.put("offer_value", offer_value);
+                    finalOffersObject.put("price", offer_value);
+                    finalOffersObject.put("cost", offer_cost);
+                    finalOffersObject.put("p", p);
+                    finalOffersObject.put("alpha", alpha);
+                    finalOffersObject.put("beta", beta);
+                    finalOffersObject.put("arm_reward", arm_reward);
+                    finalOffersObject.put("learning_reward", learning_reward);
+                    finalOffersObject.put("explore", explore);
+                    finalOffersObject.put("uuid", params.optString("uuid", ""));
+                    finalOffersObject.put("contextual_variable_one", contextual_variable_one);
+                    finalOffersObject.put("contextual_variable_two", contextual_variable_two);
+                    finalOffersObject.put("weighting", option.optDouble("weighting", -1.0));
+                    finalOffersObject.put("expected_takeup", option.optDouble("expected_takeup", -1.0));
+                    finalOffersObject.put("propensity", option.optDouble("propensity", -1.0));
+                    finalOffersObject.put("epsilon_nominated", option.optDouble("epsilon_nominated", -1.0));
+                    
+                    // For PlatformDynamicEngagementProduct
+                    if (om && offerMatrixWithKey.has(offer)) {
+                        JSONObject product = offerMatrixWithKey.getJSONObject(offer);
+                        finalOffersObject.put("product", product);
+                    }
+                    
+                    finalOffers.put(offerIndex++, finalOffersObject);
+                }
+                
+            } catch (Exception e) {
+                LOGGER.warn("ClassName:W004: Error processing option " + j + ": " + e.getMessage());
+                continue;
+            }
+        }
+        
+        // 12. Sort and set final result (REQUIRED)
+        JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
+        predictModelMojoResult.put("final_result", sortJsonArray);
+        
+        // For PlatformDynamicEngagementProduct
+        predictModelMojoResult.put("data", new JSONObject().put("featuresObj", featuresObj));
+        
+        // 13. Apply top scores (REQUIRED)
+        predictModelMojoResult = getTopScores(params, predictModelMojoResult);
+        
+        double endTimePost = System.nanoTime();
+        LOGGER.info("ClassName:I001: execution time in ms: " + 
+                   String.valueOf((endTimePost - startTimePost) / 1000000));
+        
+        return predictModelMojoResult;
+        
+    } catch (Exception e) {
+        LOGGER.error("ClassName:E999:UUID: " + 
+                    params.optString("uuid", "unknown") + 
+                    " Unexpected error: " + e.getMessage(), e);
+        if (!predictModelMojoResult.has("final_result")) {
+            predictModelMojoResult.put("final_result", new JSONArray());
+        }
+        return predictModelMojoResult;
+    }
+}
+```
+
+#### 12.10 Key Differences Summary
+
+| Aspect | Custom/Recommender | Dynamic Engagement |
+|--------|-------------------|-------------------|
+| **Loop Pattern** | `for (int i = 0; i < array.length(); i++)` | `for (int j : generateOptionsSequence())` |
+| **Data Source** | `final_result` or `domainsProbabilityObj` | `getOptions(params)` |
+| **Scoring** | Model predictions or custom | `arm_reward` from option |
+| **Filtering** | Custom logic | `compareContextualVariableValues()` |
+| **Contextual Variables** | May not use | Required from `optionParams` |
+| **MAB Fields** | Not included | Required: `alpha`, `beta`, `arm_reward` |
+| **Sorting** | Custom field | `arm_reward` |
+| **Base Class** | Custom | `PlatformDynamicEngagement` or `PlatformDynamicEngagementProduct` |
+
+---
+
+**Remember:** The plugin system is designed for extensibility while maintaining platform stability. Your customizations should enhance business logic, scoring, and recommendations without breaking the core scoring pipeline contracts. **When in doubt, preserve existing behavior and add new logic with safe fallbacks.**
