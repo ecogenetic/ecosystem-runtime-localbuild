@@ -45,7 +45,7 @@
 
     <groupId>com.ecosystem.local</groupId>
     <artifactId>ecosystem-runtime-localbuild</artifactId>
-    <version>0.9.6.1.2</version>
+    <version>0.9.6.1.3</version>
     <packaging>jar</packaging>
 
     <name>Ecosystem.Ai Client Pulse Responder (Runtime Real-time Scoring)</name>
@@ -68,7 +68,7 @@
         <dependency>
             <groupId>com.ecosystem</groupId>
             <artifactId>ecosystem-runtime</artifactId>
-            <version>0.9.6.1.2</version>
+            <version>0.9.6.1.3</version>
         </dependency>
     </dependencies>
 

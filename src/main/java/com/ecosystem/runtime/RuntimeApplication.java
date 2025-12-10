@@ -206,6 +206,8 @@ public class RuntimeApplication {
 	@EnableAsync
 	class ScheduledActivity {
 		private long count = 0;
+		private long current_count = 0;
+		private boolean initial_learning = true;
 
 		MongoClient mongoClient = new ConnectionFactory().getMongoClient();
 
@@ -226,8 +228,30 @@ public class RuntimeApplication {
 		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
+			/** Condition to check that previous learning loop has completed to avoid mongo connection closing in the
+			 * process of updating */
+			boolean previous_iteration_complete = true;
+			try {
+				if (current_count == count && !initial_learning) {
+					previous_iteration_complete = false;
+					System.out.println("WARNING: Previous learning iteration not complete, skipping");
+				}
+				long check_count_update = count;
+				current_count = count;
+				/** Check if count was updated in another thread */
+				if (check_count_update != count) {
+					current_count = current_count - 1;
+				}
+				if (initial_learning) {
+					initial_learning = false;
+				}
+			} catch (Exception e) {
+				previous_iteration_complete = false;
+				System.out.println("WARNING: Error checking if previous learning iteration not complete, skipping. Error Message: "+e.getMessage());
+			}
+
 			settings = new GlobalSettings();
-			if (settings.getCorpora() != null && mongoClient != null) {
+			if (settings.getCorpora() != null && mongoClient != null  && previous_iteration_complete) {
 
 				if (initialSettings == null)
 					initialSettings = new JSONArray();
@@ -266,41 +290,41 @@ public class RuntimeApplication {
 							System.out.println("A=====================================================================================================================");
 
 							/** PROCESS INDEXES ONCE PER STARTUP */
-                            mongoClient.close();
-                            mongoClient = new ConnectionFactory().getMongoClient();
+							mongoClient.close();
+							mongoClient = new ConnectionFactory().getMongoClient();
 
 							if (count == 0)
 								rollingEcosystemRewards.indexes(mongoClient);
 
 							if (algo.equals("binaryThompson")) {
-                                rollingEcosystemRewards = null;
-                                rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-                                rollingEcosystemRewards.process(paramDoc);
-                            }
-							if (algo.equals("epsilonGreedy"))
-                                rollingEcosystemRewards = null;
-                                rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+								rollingEcosystemRewards = null;
+								rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
 								rollingEcosystemRewards.process(paramDoc);
+							}
+							if (algo.equals("epsilonGreedy"))
+								rollingEcosystemRewards = null;
+							rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+							rollingEcosystemRewards.process(paramDoc);
 							if (algo.equals("naiveBayes")) {
-                                rollingNaiveBayes = null;
-                                rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
+								rollingNaiveBayes = null;
+								rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
 								rollingNaiveBayes.process(paramDoc);
-                            }
+							}
 							if (algo.equals("behaviorAlgos")) {
-                                rollingBehavior = null;
-                                rollingBehavior = new RollingBehavior(mongoClient);
-                                rollingBehavior.process(paramDoc);
-                            }
+								rollingBehavior = null;
+								rollingBehavior = new RollingBehavior(mongoClient);
+								rollingBehavior.process(paramDoc);
+							}
 							if (algo.equals("Network")) {
-                                rollingNetwork = null;
-                                rollingNetwork = new RollingNetwork(mongoClient);
-                                rollingNetwork.process(paramDoc);
-                            }
+								rollingNetwork = null;
+								rollingNetwork = new RollingNetwork(mongoClient);
+								rollingNetwork.process(paramDoc);
+							}
 							if (algo.equals("QLearning")) {
-                                rollingQLearning = null;
-                                rollingQLearning = new RollingQLearning(mongoClient);
-                                rollingQLearning.process(paramDoc);
-                            }
+								rollingQLearning = null;
+								rollingQLearning = new RollingQLearning(mongoClient);
+								rollingQLearning.process(paramDoc);
+							}
 
 						} catch (Exception e) {
 							System.out.println("Error: " + e.getMessage());
