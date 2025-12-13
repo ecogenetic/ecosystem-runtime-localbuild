@@ -1,11 +1,13 @@
 package com.ecosystem.plugin.customer;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.ecosystem.plugin.DynamicClassLoader;
+import com.ecosystem.plugin.business.BusinessLogic;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -43,10 +45,10 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 		double startTimePost = System.nanoTime();
 		try {
 
-            //			params.put("business_logic", "api");
-            //			params.put("business_logic_params", "dowork");
-            //			params.put("business_logic_action", "http://localhost:8091/business");
-            //			params = BusinessLogic.getValues(params);
+			//			params.put("business_logic", "api");
+			//			params.put("business_logic_params", "dowork");
+			//			params.put("business_logic_action", "http://localhost:8091/business");
+			//			params = BusinessLogic.getValues(params);
 
 			/** Setup JSON objects for specific prediction case */
 			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
@@ -79,16 +81,23 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 			/***************************************************************************************************/
 			/** Test if contextual variable is coming via api or feature store: API takes preference... */
 			if (!work.has("contextual_variable_one")) {
-				if (featuresObj.has(contextual_variables.getString("contextual_variable_one_name")))
-					work.put("contextual_variable_one", featuresObj.get(contextual_variables.getString("contextual_variable_one_name")));
-				else
+				try {
+					String k = contextual_variables.optString("contextual_variable_one_name", "");
+					work.put("contextual_variable_one",
+							(!k.isEmpty() && featuresObj.has(k)) ? featuresObj.get(k) : work.getJSONArray("value").get(0));
+				} catch (Exception ignored) {
 					work.put("contextual_variable_one", "");
+				}
 			}
+
 			if (!work.has("contextual_variable_two")) {
-				if (featuresObj.has(contextual_variables.getString("contextual_variable_two_name")))
-					work.put("contextual_variable_two", featuresObj.get(contextual_variables.getString("contextual_variable_two_name")));
-				else
+				try {
+					String k = contextual_variables.optString("contextual_variable_two_name", "");
+					work.put("contextual_variable_two",
+							(!k.isEmpty() && featuresObj.has(k)) ? featuresObj.get(k) : work.getJSONArray("value").get(1));
+				} catch (Exception ignored) {
 					work.put("contextual_variable_two", "");
+				}
 			}
 			/***************************************************************************************************/
 
@@ -179,7 +188,7 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					}
 				}
 
-                /* If eligibility list has been extracted from in_params, check that offer is eligible*/
+				/* If eligibility list has been extracted from in_params, check that offer is eligible*/
 				boolean eligibility_from_params = true;
 				if (check_eligibility_list) {
 					if (!eligibility_list.has(offer)) {
@@ -300,7 +309,7 @@ public class PlatformDynamicEngagement extends PostScoreSuper {
 					finalOffers.put(offerIndex, finalOffersObject);
 					offerIndex = offerIndex + 1;
 				}
-                LOGGER.info("");
+				LOGGER.info("");
 			}
 
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
