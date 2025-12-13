@@ -9,6 +9,10 @@ import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
  * Use this class to score with dynamic sampling configurations. This class is configured to work with no model.
@@ -75,16 +79,23 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 			/***************************************************************************************************/
 			/** Test if contextual variable is coming via api or feature store: API takes preference... */
 			if (!work.has("contextual_variable_one")) {
-				if (featuresObj.has(contextual_variables.getString("contextual_variable_one_name")))
-					work.put("contextual_variable_one", featuresObj.get(contextual_variables.getString("contextual_variable_one_name")));
-				else
+				try {
+					String k = contextual_variables.optString("contextual_variable_one_name", "");
+					work.put("contextual_variable_one",
+							(!k.isEmpty() && featuresObj.has(k)) ? featuresObj.get(k) : work.getJSONArray("value").get(0));
+				} catch (Exception ignored) {
 					work.put("contextual_variable_one", "");
+				}
 			}
+
 			if (!work.has("contextual_variable_two")) {
-				if (featuresObj.has(contextual_variables.getString("contextual_variable_two_name")))
-					work.put("contextual_variable_two", featuresObj.get(contextual_variables.getString("contextual_variable_two_name")));
-				else
+				try {
+					String k = contextual_variables.optString("contextual_variable_two_name", "");
+					work.put("contextual_variable_two",
+							(!k.isEmpty() && featuresObj.has(k)) ? featuresObj.get(k) : work.getJSONArray("value").get(1));
+				} catch (Exception ignored) {
 					work.put("contextual_variable_two", "");
+				}
 			}
 			/***************************************************************************************************/
 
@@ -110,8 +121,7 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 
 			JSONArray finalOffers = new JSONArray();
 			int offerIndex = 0;
-			int explore = 0;
-			explore = params.getInt("explore");
+			int explore = params.getInt("explore");
 			int[] optionsSequence = generateOptionsSequence(options.length(), options.length());
 			String contextual_variable_one = String.valueOf(work.get("contextual_variable_one"));
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
@@ -128,7 +138,7 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 				 */
 				/** GENERATE DEFAULT IF OPTION IS NOT IN OFFER MATRIX! */
 				String offer = option.getString("optionKey");
-                JSONObject product = offerMatrixWithKey.getJSONObject(option.getString("optionKey"));
+				JSONObject product = offerMatrixWithKey.getJSONObject(option.getString("optionKey"));
 				if (!offerMatrixWithKey.has(option.getString("optionKey"))) {
 					JSONObject singleOffer = defaultOffer(offer);
 					offerMatrixWithKey.put(option.getString("optionKey"), singleOffer);
@@ -236,7 +246,7 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 					finalOffersObject.put("uuid", params.get("uuid"));
 					finalOffersObject.put("arm_reward", arm_reward);
 					finalOffersObject.put("learning_reward", learning_reward);
-                    finalOffersObject.put("product", product);
+					finalOffersObject.put("product", product);
 
 					/* Debugging variables */
 					if (!option.has("expected_takeup"))
@@ -261,8 +271,8 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
 			predictModelMojoResult.put("final_result", sortJsonArray);
-            /** Anything added to data will be pushed out to the api response */
-            predictModelMojoResult.put("data", new JSONObject().put("featuresObj", featuresObj));
+			/** Anything added to data will be pushed out to the api response */
+			predictModelMojoResult.put("data", new JSONObject().put("featuresObj", featuresObj));
 
 			predictModelMojoResult = getTopScores(params, predictModelMojoResult);
 

@@ -39,13 +39,13 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.6</version>
+        <version>3.5.8</version>
         <relativePath/>
     </parent>
 
     <groupId>com.ecosystem.local</groupId>
     <artifactId>ecosystem-runtime-localbuild</artifactId>
-    <version>0.9.6.1.3</version>
+    <version>0.9.6.1.4</version>
     <packaging>jar</packaging>
 
     <name>Ecosystem.Ai Client Pulse Responder (Runtime Real-time Scoring)</name>
@@ -68,7 +68,7 @@
         <dependency>
             <groupId>com.ecosystem</groupId>
             <artifactId>ecosystem-runtime</artifactId>
-            <version>0.9.6.1.3</version>
+            <version>0.9.6.1.4</version>
         </dependency>
     </dependencies>
 
