@@ -5,7 +5,7 @@ globs:
   - "**/plugin/customer/*.java"
   - "**/plugin/business/*.java"
   - "**/plugin/reward/*.java"
-alwaysApply: true
+alwaysApply: false
 ---
 
 # ecosystem.Ai Runtime Plugin Development Rules
