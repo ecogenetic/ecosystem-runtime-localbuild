@@ -1,0 +1,12 @@
+---
+description: Localbuild is a plugin overlay; ecosystem-runtime is the platform source of truth
+alwaysApply: true
+---
+
+# ecosystem.Ai Runtime Plugin Development Guidelines (localbuild)
+
+Full plugin-contract text is in `.cursorrules` (attached when plugin Java is in context).
+
+- Platform source of truth: **`ecosystem-runtime`**
+- Keep `getPrePredict` / `getPostPredict` signatures frozen
+- Closed loop for callers: `POST /invocations` then `POST /response` (singular)
