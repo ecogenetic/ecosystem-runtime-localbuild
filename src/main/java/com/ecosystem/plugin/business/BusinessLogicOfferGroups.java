@@ -1,10 +1,10 @@
 package com.ecosystem.plugin.business;
 
 import com.ecosystem.utils.DataTypeConversions;
-import com.ecosystem.utils.log.LogManager;
-import com.ecosystem.utils.log.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
 
 public class BusinessLogicOfferGroups {
     private static final Logger LOGGER = LogManager.getLogger(BusinessLogicOfferGroups.class.getName());

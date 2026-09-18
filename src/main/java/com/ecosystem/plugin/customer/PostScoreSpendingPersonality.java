@@ -8,6 +8,8 @@ import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import static com.ecosystem.worker.rest.RestAccess.getRestGeneric;
+
 /**
  * This is the post-score class to obtain spending personality.
  */
@@ -67,41 +69,49 @@ public class PostScoreSpendingPersonality extends PostScoreSuper {
 			}
 			*/
 
-			if (featuresObj.has("price"))
-				finalOffersObject.put("price", featuresObj.get("price"));
+			if (hasFeature(featuresObj, "price"))
+				finalOffersObject.put("price", getFeature(featuresObj, "price"));
 			else
 				finalOffersObject.put("price", 1.0);
 
-			if (featuresObj.has("cost"))
-				finalOffersObject.put("cost", featuresObj.get("cost"));
+			if (hasFeature(featuresObj, "cost"))
+				finalOffersObject.put("cost", getFeature(featuresObj, "cost"));
 			else
 				finalOffersObject.put("cost", 1.0);
 
-			if (featuresObj.has("Experiential"))
-				finalOffersObject.put("experiential", featuresObj.get("Experiential"));
-			if (featuresObj.has("Extrovert"))
-				finalOffersObject.put("extrovert", featuresObj.get("Extrovert"));
-			if (featuresObj.has("Enthusiastic"))
-				finalOffersObject.put("enthusiastic", featuresObj.get("Enthusiastic"));
-			if (featuresObj.has("Industrious"))
-				finalOffersObject.put("industrious", featuresObj.get("Industrious"));
-			if (featuresObj.has("Intentional"))
-				finalOffersObject.put("intentional", featuresObj.get("Intentional"));
-			if (featuresObj.has("Introvert"))
-				finalOffersObject.put("introvert", featuresObj.get("Introvert"));
+			if (hasFeature(featuresObj, "Experiential"))
+				finalOffersObject.put("experiential", getFeature(featuresObj, "Experiential"));
+			if (hasFeature(featuresObj, "Extrovert"))
+				finalOffersObject.put("extrovert", getFeature(featuresObj, "Extrovert"));
+			if (hasFeature(featuresObj, "Enthusiastic"))
+				finalOffersObject.put("enthusiastic", getFeature(featuresObj, "Enthusiastic"));
+			if (hasFeature(featuresObj, "Industrious"))
+				finalOffersObject.put("industrious", getFeature(featuresObj, "Industrious"));
+			if (hasFeature(featuresObj, "Intentional"))
+				finalOffersObject.put("intentional", getFeature(featuresObj, "Intentional"));
+			if (hasFeature(featuresObj, "Introvert"))
+				finalOffersObject.put("introvert", getFeature(featuresObj, "Introvert"));
 
-			if (featuresObj.has("personality"))
-				finalOffersObject.put("personality", featuresObj.get("personality"));
-			if (featuresObj.has("trait"))
-				finalOffersObject.put("trait", featuresObj.get("trait"));
-			if (featuresObj.has("count"))
-				finalOffersObject.put("transaction_count", featuresObj.get("count"));
+			if (hasFeature(featuresObj, "personality"))
+				finalOffersObject.put("personality", getFeature(featuresObj, "personality"));
+			if (hasFeature(featuresObj, "trait"))
+				finalOffersObject.put("trait", getFeature(featuresObj, "trait"));
+			if (hasFeatureAny(featuresObj, "count", "transaction_count"))
+				finalOffersObject.put("transaction_count", getFeatureAny(featuresObj, "count", "transaction_count"));
 
-			finalOffersObject.put("offer", featuresObj.getString("personality"));
-			finalOffersObject.put("offer_id", featuresObj.getString("personality"));
-			finalOffersObject.put("offer_name", featuresObj.getString("personality"));
-			finalOffersObject.put("score", featuresObj.get(featuresObj.getString("personality")));
-			finalOffersObject.put("modified_offer_score", featuresObj.get(featuresObj.getString("trait")));
+			String personality = hasFeature(featuresObj, "personality")
+					? getFeatureString(featuresObj, "personality")
+					: "none";
+			String trait = hasFeature(featuresObj, "trait")
+					? getFeatureString(featuresObj, "trait")
+					: "none";
+			finalOffersObject.put("offer", personality);
+			finalOffersObject.put("offer_id", personality);
+			finalOffersObject.put("offer_name", personality);
+			finalOffersObject.put("score",
+					resolveFeatureScore(featuresObj, personality, "personality_score"));
+			finalOffersObject.put("modified_offer_score",
+					resolveFeatureScore(featuresObj, trait, "trait_score"));
 
 			finalOffersObject.put("offer_details", domainsProbabilityObj);
 
@@ -119,6 +129,10 @@ public class PostScoreSpendingPersonality extends PostScoreSuper {
 			finalOffersObject.put("offer_value", offer_value);
 			finalOffersObject.put("uuid", params.get("uuid"));
 
+			JSONObject drift = extractLatestPersonalityDrift(featuresObj, "spend");
+			JSONObject dataPayload = new JSONObject().put("featuresObj", featuresObj);
+			attachPersonalityDrift(finalOffersObject, dataPayload, drift);
+
 			/** Add other structures to the final result */
 			finalOffersObject.put("offer_matrix", new JSONObject());
 
@@ -129,6 +143,8 @@ public class PostScoreSpendingPersonality extends PostScoreSuper {
 			/** Sort final offer list based on score */
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "score", "double", "d");
 			predictModelMojoResult.put("final_result", sortJsonArray);
+			/** Anything added to data will be pushed out to the api response */
+			predictModelMojoResult.put("data", dataPayload);
 
 		} catch (Exception e) {
 			LOGGER.error(e);

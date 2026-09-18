@@ -3,7 +3,10 @@ package com.ecosystem.plugin.reward;
 import org.json.JSONObject;
 
 /**
- * Dynamically loaded class to calculate the reward during algorithm loop.
+ * Template reward plugin. Copy this class, replace the placeholder cost / category / state
+ * lookups, and set {@code plugin.reward} to the new class name.
+ * Must put a {@code rewards} object on {@code params} with {@code reward} (score-time
+ * multiplier) and {@code learning_reward} (learning weight). See README "Reward Plugins".
  */
 public class ExampleReward extends RewardSuper {
 
@@ -48,6 +51,8 @@ public class ExampleReward extends RewardSuper {
         if (rewards == null)
             rewards = new JSONObject();
         rewards.put("reward", reward);
+        rewards.put("learning_reward", 1.0);
+        params.put("rewards", rewards);
         return params;
     }
 

@@ -3,6 +3,8 @@ package com.ecosystem.plugin.customer;
 import com.datastax.oss.driver.api.core.CqlSession;
 import org.json.JSONObject;
 
+import java.util.List;
+
 /**
  * This is the same structure as DefaultPreScore
  */

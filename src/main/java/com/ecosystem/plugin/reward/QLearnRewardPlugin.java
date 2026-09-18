@@ -4,9 +4,9 @@ import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
 import org.json.JSONObject;
 
+import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 public class QLearnRewardPlugin extends RewardSuper {
 

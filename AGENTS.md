@@ -2,6 +2,8 @@
 
 Local/customer runtime overlay. Plugin contracts are strict (reflection-loaded). Platform source of truth is **`ecosystem-runtime`**.
 
+Operator / developer narrative: **`GUIDE.md`** — runtime concept, invoke/learn sequence (pre-score → post-score → reward), algorithm convergence, and which post-score class to use. Plugin signatures stay in `README.md`. Algorithm IDs must match `ECOSYSTEM_ALGORITHMS.md` (in the Maven JAR / sibling runtime repo).
+
 ## Plugins
 
 - Follow `.cursorrules` when editing `plugin/customer`, `plugin/business`, or `plugin/reward` (globs — not always-on).

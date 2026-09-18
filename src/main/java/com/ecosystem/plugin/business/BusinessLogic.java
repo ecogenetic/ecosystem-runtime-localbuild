@@ -5,10 +5,11 @@ import org.json.JSONObject;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-
-import static com.ecosystem.plugin.business.BusinessLogicOfferGroups.offerGroups;
-import static com.ecosystem.plugin.business.BusinessLogicValueCalc.valueCalc;
 import static com.ecosystem.worker.rest.RestAccess.getRestGeneric;
+
+/** TODO: setup to load dynamically */
+import static com.ecosystem.plugin.business.BusinessLogicValueCalc.valueCalc;
+import static com.ecosystem.plugin.business.BusinessLogicOfferGroups.offerGroups;
 
 public class BusinessLogic {
 

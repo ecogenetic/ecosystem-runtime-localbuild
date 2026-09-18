@@ -3,9 +3,9 @@ package com.ecosystem.plugin.customer;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -88,19 +88,19 @@ public class PostScoreRecommenderOffers extends PostScoreSuper {
 
                 String offer_id = "";
                 String offer_name = "";
-                if (domainsProbabilityObj.has(singleOffer.getString("offer_id").trim())) {
-                    offer_id = singleOffer.getString("offer_id").trim();
+                if (domainsProbabilityObj.has(singleOffer.getString("offer").trim())) {
+                    offer_id = singleOffer.getString("offer").trim();
                 } else if (domainsProbabilityObj.has(singleOffer.getString("offer").trim())) {
                     offer_id = singleOffer.getString("offer").trim();
                 } else if (domainsProbabilityObj.has(singleOffer.getString("offer_name").trim())) {
                     offer_name = singleOffer.getString("offer_name").trim();
                 } else {
-                    LOGGER.error("offerRecommender:E002-1: " + params.get("uuid") + " - Not available (offer_id, offer, offer_name from probabilities): " + singleOffer.getString("offer_name"));
+                    LOGGER.error("offerRecommender:E002-1: " + params.get("uuid") + " - Not available (offer, offer, offer_name from probabilities): " + singleOffer.getString("offer_name"));
                 }
 
                 double p = 0.0;
                 if (domainsProbabilityObj.has(offer_id.trim())) {
-                    offer_id = singleOffer.getString("offer_id").trim();
+                    offer_id = singleOffer.getString("offer").trim();
                     p = domainsProbabilityObj.getDouble(offer_id);
                 } else {
                     LOGGER.error("offerRecommender:E002-1: " + params.get("uuid") + " - Not available: " + singleOffer.getString("offer_name"));
