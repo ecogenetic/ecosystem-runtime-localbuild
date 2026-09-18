@@ -1,11 +1,11 @@
 package com.ecosystem.runtime;
 
 import com.ecosystem.data.mongodb.ConnectionFactory;
+import com.ecosystem.plugin.PluginLoader;
 import com.ecosystem.runtime.continuous.*;
 import com.ecosystem.utils.EnvironmentalVariables;
 import com.ecosystem.utils.GlobalSettings;
-import com.ecosystem.utils.log.LogManager;
-import com.ecosystem.utils.log.Logger;
+import com.ecosystem.worker.license.ValidationService;
 import com.mongodb.client.MongoClient;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.servers.Server;
@@ -16,20 +16,15 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import com.ecosystem.utils.log.LogManager;
+import com.ecosystem.utils.log.Logger;
+//import io.undertow.predicate.TruePredicate;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.cassandra.CassandraReactiveDataAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
-import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
-import org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -37,6 +32,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.AbstractRequestMatcherRegistry;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -45,11 +41,10 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
-import java.util.Calendar;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.TimeZone;
+import java.util.*;
+import java.util.concurrent.Executor;
 
 import static com.ecosystem.worker.license.ValidationService.getEnvKey;
 import static com.ecosystem.worker.license.ValidationService.setEnvKey;
@@ -63,15 +58,17 @@ import static com.ecosystem.worker.license.ValidationService.setEnvKey;
 		servers = {
 				@Server(url = "/", description = "Default Server URL")
 		})
-@SpringBootApplication(exclude = {
-		KafkaAutoConfiguration.class,
-        CassandraAutoConfiguration.class,
-        CassandraDataAutoConfiguration.class,
-		CassandraReactiveDataAutoConfiguration.class,
-		MongoDataAutoConfiguration.class,
-		MongoRepositoriesAutoConfiguration.class,
-		MongoAutoConfiguration.class,
-		MongoReactiveAutoConfiguration.class
+@SpringBootApplication(excludeName = {
+		// Spring Boot 4.0 reorganized autoconfigure packages
+		"org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration",
+		"org.springframework.boot.cassandra.autoconfigure.CassandraAutoConfiguration",
+		"org.springframework.boot.data.cassandra.autoconfigure.CassandraDataAutoConfiguration",
+		"org.springframework.boot.data.cassandra.autoconfigure.CassandraReactiveDataAutoConfiguration",
+		"org.springframework.boot.data.cassandra.autoconfigure.DataCassandraReactiveAutoConfiguration",
+		"org.springframework.boot.mongo.autoconfigure.MongoAutoConfiguration",
+		"org.springframework.boot.mongo.autoconfigure.MongoReactiveAutoConfiguration",
+		"org.springframework.boot.data.mongo.autoconfigure.MongoDataAutoConfiguration",
+		"org.springframework.boot.data.mongo.autoconfigure.MongoRepositoriesAutoConfiguration"
 })
 @EnableWebSecurity
 @Configuration
@@ -86,6 +83,13 @@ public class RuntimeApplication {
 	private static String p = "8091";
 	private static String role = "ADMIN";
 	private static String classLoader = null;
+
+	static String MASTER_KEY; //  = "13a6a3f7-9196-4fbb-95eb-4891e508c76d";
+
+	/** Returns the configured master API key, if any. */
+	public static String getMasterKey() {
+		return MASTER_KEY;
+	}
 
 	static GlobalSettings settings;
 	static JSONArray initialSettings = null;
@@ -104,7 +108,7 @@ public class RuntimeApplication {
 		}
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.6.1.4 Build: 2025-12.235");
+		System.out.println("Version: 0.9.7.0 Build: 2026-01.5343");
 		System.out.println("============================================================");
 
 		Calendar c = Calendar.getInstance();
@@ -117,16 +121,66 @@ public class RuntimeApplication {
 		String env_port = EnvironmentalVariables.getEnvKey("SERVER_PORT");
 		if (env_port != null) p = env_port;
 
-        if (settings.getCorpora() != null)
-            initialSettings = settings.getCorpora();
+		/* TODO: Set global var for Logging! */
+		if (args.length > 0) {
+			LOGGER.info("Runtime Parameters: " + args[0]);
+			for (int i = 0; i < args.length; i++) {
+				if (args[i].toLowerCase().contains("--port=")) {
+					try {
+						LOGGER.info("Set port number via command line parameter: " + args[i]);
+						p = args[i].substring(7);
+						System.setProperty("server.port", p);
+					} catch (Exception e) {
+						LOGGER.error("Set port number via command line parameter, eg: --port 9090 ");
+					}
+				}
+				if (args[i].toLowerCase().equalsIgnoreCase("--port")) {
+					try {
+						LOGGER.info("Set port number via command line parameter: " + args[i + 1]);
+						p = args[i + 1];
+						System.setProperty("server.port", p);
+					} catch (Exception e) {
+						LOGGER.error("Set port number via command line parameter, eg: --port 9090 ");
+					}
+				}
+				try {
+					if (args[i].toLowerCase().equalsIgnoreCase("--plugin")) {
+						classLoader = args[i + 1];
+						PluginLoader p = new PluginLoader(classLoader);
+						LOGGER.info("Plugin: " + args[i + 1]);
+					}
 
-        context = SpringApplication.run(RuntimeApplication.class, args);
+					/* security and access */
+					if (args[i].toLowerCase().equalsIgnoreCase("--security")) {
+						LOGGER.info("Security Enabled");
+						securityFlag = true;
+					}
+				} catch (Exception e) {
+					LOGGER.info("Error on command line: " + e);
+				}
+			}
+		}
+		/* If the key is used overwrite date check... */
+		if (key != null) {
+			MASTER_KEY = key;
+			System.out.println("Key used (command line)...");
+		} else {
+			MASTER_KEY = getEnvKey("MASTER_KEY");
+			System.out.println("Key used (environment)...");
+		}
 
-        LOGGER.info("RuntimeApplication: ecosystem.Ai Client Pulse Responder Started on port number: " + p);
-        System.out.println("====================================================================================");
-        System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
-        System.out.println("====================================================================================");
+		if (ValidationService.validate(MASTER_KEY, "client-pulse-responder@startup")) {
+			if (settings.getCorpora() != null)
+				initialSettings = settings.getCorpora();
 
+			setEnvKey("MASTER_KEY", MASTER_KEY);
+			context = SpringApplication.run(RuntimeApplication.class, args);
+			LOGGER.info("RuntimeApplication: ecosystem.Ai Client Pulse Responder Started on port number: " + p);
+			System.out.println("====================================================================================");
+			System.out.println("Client Pulse Responder started. For more info go to : https://ecosystem.ai");
+			System.out.println("====================================================================================");
+
+		}
 	}
 
 	/*****************************************************************************************************************
@@ -149,7 +203,7 @@ public class RuntimeApplication {
 						.description("The ecosystem.Ai Client Pulse Responder Engine brings the power of real-time and near-time predictions to the enterprise. Implement your behavioral construct " +
 								"and core hypotheses through a configurable prediction platform. If you don't know how the model is going to behave, use our behavioral tracker" +
 										"to assist with selection and exploit the most successful options.")
-						.version("v0.9.6")
+						.version("v0.9.7")
 						.license(new License().name("ecosystem.Ai 1.0").url("https://ecosystem.ai")))
 						.externalDocs(new ExternalDocumentation()
 						.description("Learn Ecosystem")
@@ -163,6 +217,89 @@ public class RuntimeApplication {
 										.name("X-API-KEY")
 								)
 				).addSecurityItem(new SecurityRequirement().addList("apiKeyScheme"));
+	}
+
+	/*****************************************************************************************************************
+	 * Multi-Campaign Scheduler Configuration
+	 *****************************************************************************************************************/
+
+	/**
+	 * Multi-campaign scheduler instance (lazily initialized).
+	 * This scheduler runs learning for all active campaigns in parallel.
+	 */
+	private static MultiCampaignScheduler multiCampaignScheduler;
+
+	/**
+	 * Flag to enable multi-campaign mode scheduling.
+	 * When true, the MultiCampaignScheduler handles learning for dynamic campaigns.
+	 * When false, the legacy ScheduledActivity handles single-campaign learning.
+	 */
+	private static boolean multiCampaignModeEnabled = true;
+
+	/**
+	 * Bean for multi-campaign scheduler.
+	 * Wired to ProductMaster's activeContexts for access to campaign state.
+	 * NOTE: Must NOT be @Lazy - the scheduler needs to be created at startup
+	 * for @Scheduled methods to be registered and run.
+	 */
+	@Bean
+	public MultiCampaignScheduler multiCampaignScheduler(ProductMaster productMaster) {
+		LOGGER.info("Creating MultiCampaignScheduler bean - scheduler will process campaigns from /campaigns API");
+		multiCampaignScheduler = new MultiCampaignScheduler(productMaster.activeContexts);
+		// Legacy ScheduledActivity still runs for properties-file-based single campaign
+		// MultiCampaignScheduler handles dynamic campaigns from /refresh API
+		return multiCampaignScheduler;
+	}
+
+	/**
+	 * Task executor for async operations.
+	 * Used by scheduled tasks and async API operations.
+	 */
+	@Bean(name = "taskExecutor")
+	public Executor taskExecutor() {
+		ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+		executor.setCorePoolSize(4);
+		executor.setMaxPoolSize(16);
+		executor.setQueueCapacity(100);
+		executor.setThreadNamePrefix("async-task-");
+		executor.initialize();
+		return executor;
+	}
+
+	/**
+	 * Graceful shutdown of multi-campaign scheduler.
+	 */
+	@PreDestroy
+	public void onShutdown() {
+		LOGGER.info("RuntimeApplication: Shutting down...");
+		if (multiCampaignScheduler != null) {
+			multiCampaignScheduler.shutdown();
+		}
+	}
+
+	/**
+	 * Get the multi-campaign scheduler instance.
+	 */
+	public static MultiCampaignScheduler getMultiCampaignScheduler() {
+		return multiCampaignScheduler;
+	}
+
+	/**
+	 * Check if multi-campaign mode is enabled.
+	 */
+	public static boolean isMultiCampaignModeEnabled() {
+		return multiCampaignModeEnabled;
+	}
+
+	/**
+	 * Enable or disable multi-campaign mode.
+	 */
+	public static void setMultiCampaignModeEnabled(boolean enabled) {
+		multiCampaignModeEnabled = enabled;
+		if (multiCampaignScheduler != null) {
+			multiCampaignScheduler.setEnabled(enabled);
+		}
+		LOGGER.info("Multi-campaign mode " + (enabled ? "enabled" : "disabled"));
 	}
 
 	/* This is to turn security off. Username and password is in the application.properties file */
@@ -200,14 +337,25 @@ public class RuntimeApplication {
     }
 
 	/*****************************************************************************************************************
-	 * Scheduling engine for model creating and scoring updates.
+	 * Legacy Scheduling Engine for Single-Campaign Mode
+	 *
+	 * This scheduler handles learning for the single campaign defined in ecosystem.properties.
+	 * It operates independently of the MultiCampaignScheduler.
+	 *
+	 * For multi-campaign mode (dynamic campaigns via /refresh API):
+	 * - Use MultiCampaignScheduler which handles all dynamically created campaigns
+	 * - Each campaign has its own isolated context and rolling workers
+	 *
+	 * Both schedulers can run simultaneously:
+	 * - ScheduledActivity: handles legacy single-campaign from properties file
+	 * - MultiCampaignScheduler: handles dynamic campaigns from /refresh API
 	 *****************************************************************************************************************/
 	@EnableScheduling
 	@EnableAsync
 	class ScheduledActivity {
 		private long count = 0;
-		private long current_count = 0;
-		private boolean initial_learning = true;
+        private long current_count = 0;
+        private boolean initial_learning = true;
 
 		MongoClient mongoClient = new ConnectionFactory().getMongoClient();
 
@@ -228,26 +376,43 @@ public class RuntimeApplication {
 		@Scheduled(fixedDelayString = "${monitoring.delay}000")
 		public void scheduleFixedRateTaskAsync() throws Exception {
 
-			/** Condition to check that previous learning loop has completed to avoid mongo connection closing in the
-			 * process of updating */
-			boolean previous_iteration_complete = true;
-			try {
-				if (current_count == count && !initial_learning) {
-					previous_iteration_complete = false;
-					System.out.println("WARNING: Previous learning iteration not complete, skipping");
+            /** Condition to check that previous learning loop has completed to avoid mongo connection closing in the
+             * process of updating */
+            boolean previous_iteration_complete = true;
+            try {
+                if (current_count == count && !initial_learning) {
+                    previous_iteration_complete = false;
+                    System.out.println("WARNING: Previous learning iteration not complete, skipping");
+                }
+                long check_count_update = count;
+                current_count = count;
+                /** Check if count was updated in another thread */
+                if (check_count_update != count) {
+                    current_count = current_count - 1;
+                }
+                if (initial_learning) {
+                    initial_learning = false;
+                }
+            } catch (Exception e) {
+                previous_iteration_complete = false;
+                System.out.println("WARNING: Error checking if previous learning iteration not complete, skipping. Error Message: "+e.getMessage());
+            }
+
+			/**
+			 * IMPORTANT: Skip legacy scheduler processing when MultiCampaignScheduler has active campaigns.
+			 * The MultiCampaignScheduler handles all dynamically created campaigns from the /refresh API.
+			 * This legacy scheduler only handles campaigns from the properties file when no dynamic campaigns exist.
+			 */
+			if (multiCampaignModeEnabled && multiCampaignScheduler != null && 
+				multiCampaignScheduler.getActiveContexts() != null && 
+				!multiCampaignScheduler.getActiveContexts().isEmpty()) {
+				// MultiCampaignScheduler is handling campaigns - skip legacy processing
+				if (count == 0) {
+					System.out.println("A===>>> Legacy scheduler: MultiCampaignScheduler is active with " + 
+						multiCampaignScheduler.getActiveContexts().size() + " campaign(s). Skipping legacy processing.");
 				}
-				long check_count_update = count;
-				current_count = count;
-				/** Check if count was updated in another thread */
-				if (check_count_update != count) {
-					current_count = current_count - 1;
-				}
-				if (initial_learning) {
-					initial_learning = false;
-				}
-			} catch (Exception e) {
-				previous_iteration_complete = false;
-				System.out.println("WARNING: Error checking if previous learning iteration not complete, skipping. Error Message: "+e.getMessage());
+				count = count + 1;
+				return;
 			}
 
 			settings = new GlobalSettings();
@@ -256,7 +421,7 @@ public class RuntimeApplication {
 				if (initialSettings == null)
 					initialSettings = new JSONArray();
 
-				/** Changes in settings */
+				/** Changes in settings - only reconnect if settings actually changed */
 				if (!initialSettings.toString().equals(settings.getCorpora().toString())) {
 					System.out.println("Settings changed, restarting...");
 					if (mongoClient != null)
@@ -279,69 +444,76 @@ public class RuntimeApplication {
 
 				if (rollingEcosystemRewards != null) {
 
-					JSONObject paramDoc = rollingEcosystemRewards.checkCorpora(settings);
-					if (!paramDoc.isEmpty()) {
-
-						try {
-							String algo = paramDoc.getJSONObject("randomisation").getString("approach");
-
-							System.out.println("A=====================================================================================================================");
-							System.out.println("A===>>> Execute Dynamic Engine for: " + paramDoc.get("name") + " [" + algo + "] on (" + count + "): " + RollingEcosystemRewards.nowDate());
-							System.out.println("A=====================================================================================================================");
-
-							/** PROCESS INDEXES ONCE PER STARTUP */
-							mongoClient.close();
-							mongoClient = new ConnectionFactory().getMongoClient();
-
-							if (count == 0)
-								rollingEcosystemRewards.indexes(mongoClient);
-
-							if (algo.equals("binaryThompson")) {
-								rollingEcosystemRewards = null;
-								rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-								rollingEcosystemRewards.process(paramDoc);
-							}
-							if (algo.equals("epsilonGreedy"))
-								rollingEcosystemRewards = null;
-							rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-							rollingEcosystemRewards.process(paramDoc);
-							if (algo.equals("naiveBayes")) {
-								rollingNaiveBayes = null;
-								rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
-								rollingNaiveBayes.process(paramDoc);
-							}
-							if (algo.equals("behaviorAlgos")) {
-								rollingBehavior = null;
-								rollingBehavior = new RollingBehavior(mongoClient);
-								rollingBehavior.process(paramDoc);
-							}
-							if (algo.equals("Network")) {
-								rollingNetwork = null;
-								rollingNetwork = new RollingNetwork(mongoClient);
-								rollingNetwork.process(paramDoc);
-							}
-							if (algo.equals("QLearning")) {
-								rollingQLearning = null;
-								rollingQLearning = new RollingQLearning(mongoClient);
-								rollingQLearning.process(paramDoc);
-							}
-
-						} catch (Exception e) {
-							System.out.println("Error: " + e.getMessage());
-							e.printStackTrace();
-							System.out.println("B=====================================================================================================================");
-							System.out.println("B===>>> Dynamic engine not processing. Updating all settings now...");
-							System.out.println("B=====================================================================================================================");
-
-							System.out.println("Settings changed, restarting...");
-							if (mongoClient != null)
-								mongoClient.close();
-							mongoClient = new ConnectionFactory().getMongoClient();
-							rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
-							rollingEcosystemRewards.dynamicRecommender(mongoClient, settings);
-							initialSettings = settings.getCorpora();
-
+					/** Get ALL dynamic recommenders from corpora */
+					JSONArray allParamDocs = rollingEcosystemRewards.checkAllCorpora(settings);
+					int totalRecommenders = allParamDocs.length();
+					
+					if (totalRecommenders > 0) {
+						System.out.println("A=====================================================================================================================");
+						System.out.println("A===>>> Processing " + totalRecommenders + " dynamic recommender(s) on iteration (" + count + "): " + RollingEcosystemRewards.nowDate());
+						System.out.println("A=====================================================================================================================");
+						
+						/** PROCESS INDEXES ONCE PER STARTUP - don't close/recreate connection every time */
+						if (count == 0) {
+							rollingEcosystemRewards.indexes(mongoClient);
 						}
+
+						/** Iterate through ALL dynamic recommenders */
+						for (int recommenderIdx = 0; recommenderIdx < totalRecommenders; recommenderIdx++) {
+							JSONObject paramDoc = allParamDocs.getJSONObject(recommenderIdx);
+							
+							try {
+								String algo = paramDoc.getJSONObject("randomisation").getString("approach");
+								String recommenderName = paramDoc.optString("name", "Unknown");
+
+								System.out.println("A---------------------------------------------------------------------------------------------------------------------");
+								System.out.println("A===>>> Execute Dynamic Engine for: " + recommenderName + " [" + algo + "] (" + (recommenderIdx + 1) + "/" + totalRecommenders + "): " + RollingEcosystemRewards.nowDate());
+								System.out.println("A---------------------------------------------------------------------------------------------------------------------");
+
+								if (algo.equals("binaryThompson")) {
+									rollingEcosystemRewards = null;
+									rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+									rollingEcosystemRewards.process(paramDoc);
+								}
+								if (algo.equals("epsilonGreedy")) {
+									rollingEcosystemRewards = null;
+									rollingEcosystemRewards = new RollingEcosystemRewards(mongoClient);
+									rollingEcosystemRewards.process(paramDoc);
+								}
+								if (algo.equals("naiveBayes")) {
+									rollingNaiveBayes = null;
+									rollingNaiveBayes = new RollingNaiveBayes(mongoClient);
+									rollingNaiveBayes.process(paramDoc);
+								}
+								if (algo.equals("behaviorAlgos")) {
+									rollingBehavior = null;
+									rollingBehavior = new RollingBehavior(mongoClient);
+									rollingBehavior.process(paramDoc);
+								}
+								if (algo.equals("Network")) {
+									rollingNetwork = null;
+									rollingNetwork = new RollingNetwork(mongoClient);
+									rollingNetwork.process(paramDoc);
+								}
+								if (algo.equals("QLearning")) {
+									rollingQLearning = null;
+									rollingQLearning = new RollingQLearning(mongoClient);
+									rollingQLearning.process(paramDoc);
+								}
+
+							} catch (Exception e) {
+								System.out.println("Error processing recommender " + (recommenderIdx + 1) + ": " + e.getMessage());
+								e.printStackTrace();
+								System.out.println("B---------------------------------------------------------------------------------------------------------------------");
+								System.out.println("B===>>> Dynamic engine error for recommender " + (recommenderIdx + 1) + ", continuing with next...");
+								System.out.println("B---------------------------------------------------------------------------------------------------------------------");
+								// Continue processing remaining recommenders instead of stopping
+							}
+						}
+						
+						System.out.println("A=====================================================================================================================");
+						System.out.println("A===>>> Completed processing " + totalRecommenders + " dynamic recommender(s) on iteration (" + count + ")");
+						System.out.println("A=====================================================================================================================");
 					}
 
 					count = count + 1;
@@ -349,6 +521,64 @@ public class RuntimeApplication {
 			}
 		}
 	}
+
+
+
+
+	/*****************************************************************************************************************
+	 * Scheduling engine for real-time features. Temporarily disabled...
+	 *****************************************************************************************************************/
+//	@EnableScheduling
+//	@EnableAsync
+//	class ScheduledActivityRealTimeTraining {
+//		private String uuid = null;
+//		private long count = 0;
+//		GlobalSettings settings;
+//		{
+//			try {
+//				settings = new GlobalSettings();
+//			} catch (Exception e) {
+//				throw new RuntimeException(e);
+//			}
+//		}
+//
+//		RollingFeatures rollingFeatures = new RollingFeatures();
+//
+//		/**
+//		 * Continous scheduling engine.
+//		 * Set FEATURE_DELAY in seconds for processing, default is set to 10 mins.
+//		 */
+//		@Async
+//		@Qualifier(value = "taskExecutor2")
+//		@Scheduled(fixedDelayString = "${feature.delay}000", initialDelay = 80000)
+//		public void scheduleFixedRateTaskAsync() throws Exception {
+//
+//			//TODO: THIS IS DISABLED FOR NOW, UNTIL ANOTHER APPROACH IS CREATED OR IMPLEMENTED.
+//
+////			System.out.println("F==================================================================================================");
+////			System.out.println("F===>>> Execute Features and Training Engine (" + count + "): " + RollingEcosystemRewards.nowDate());
+////			System.out.println("F==================================================================================================");
+//
+//			/** PROCESS REAL-TIME FEATURE CREATION */
+//			try {
+////				settings = new GlobalSettings();
+////
+////				if (rollingFeatures == null)
+////					rollingFeatures = new RollingFeatures();;
+////
+////				rollingFeatures.process();
+//
+//			} catch (Exception e) {
+//				System.out.println("F==================================================================================================");
+//				System.out.println("F===>>> Feature creation engine not processing, check FEATURE_DELAY env variable.");
+//				System.out.println("F==================================================================================================");
+//				e.printStackTrace();
+//			}
+//
+////			count = count + 1;
+//
+//		}
+//	}
 
 	public static ConfigurableApplicationContext getContext() {
 		return context;

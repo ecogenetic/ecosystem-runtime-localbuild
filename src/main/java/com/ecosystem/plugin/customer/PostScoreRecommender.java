@@ -4,13 +4,15 @@ import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.GlobalSettings;
 import com.ecosystem.utils.JSONArraySort;
 import com.ecosystem.utils.MathRandomizer;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.util.HashSet;
 
 /**
  * ECOSYSTEM.AI INTERNAL PLATFORM SCORING
@@ -53,47 +55,37 @@ public class PostScoreRecommender {
 		double startTimePost = System.nanoTime();
 		try {
 			/* Setup JSON objects for specific prediction case */
-			JSONObject featuresObj = predictModelMojoResult.getJSONObject("featuresObj");
 			if (predictModelMojoResult.has("ErrorMessage")) {
 				LOGGER.error("getPostPredict:E001a:" + predictModelMojoResult.get("ErrorMessage"));
 				return null;
 			}
 
-			JSONArray offerMatrix = new JSONArray();
-			if (params.has("offerMatrix"))
-				offerMatrix = params.getJSONArray("offerMatrix");
-
-			JSONObject work = params.getJSONObject("in_params");
-
 			JSONObject domainsProbabilityObj = predictModelMojoResult.getJSONObject("domainsProbabilityObj");
 			if (!predictModelMojoResult.has("label"))
 				LOGGER.error("getPostPredict:E001b: No label found in predictModelMojoResult. Check that the configuration is correct.");
 
-			String label = predictModelMojoResult.getJSONArray("label").getString(0);
-
-			JSONArray probabilities = new JSONArray();
-			if (predictModelMojoResult.has("probability"))
-				probabilities = predictModelMojoResult.getJSONArray("probability");
-			else
-				probabilities = predictModelMojoResult.getJSONArray("probabilities");
+			if (predictModelMojoResult.getJSONArray("label").isEmpty())
+				LOGGER.error("getPostPredict:E001c: Empty label array found in predictModelMojoResult. Check that the configuration is correct.");
 
 			JSONArray domains = predictModelMojoResult.getJSONArray("domains");
 
 			JSONArray finalOffers = new JSONArray();
-			int resultcount = (int) params.get("resultcount");
 			int offerIndex = 0;
+			JSONArray scoredDomains = getScoredDomains(domains, domainsProbabilityObj);
 
-			/** Select top items based on number of offers to present */
-			for (int i = 0; i < resultcount; i++) {
+			/** Select scored domains/offers; getTopScores will trim to resultcount after sorting. */
+			for (int i = 0; i < scoredDomains.length(); i++) {
+				String domain = String.valueOf(scoredDomains.get(i));
+				if (!domainsProbabilityObj.has(domain)) continue;
 				int explore = (int) params.get("explore");
 				JSONObject finalOffersObject = new JSONObject();
 
-				finalOffersObject.put("offer", label);
-				finalOffersObject.put("offer_name", label);
-				finalOffersObject.put("offer_name_desc", label + " - " + i);
+				finalOffersObject.put("offer", domain);
+				finalOffersObject.put("offer_name", domain);
+				finalOffersObject.put("offer_name_desc", domain + " - " + offerIndex);
 
 				/** process final */
-				double p = domainsProbabilityObj.getDouble(label);
+				double p = domainsProbabilityObj.getDouble(domain);
 				finalOffersObject.put("score", p);
 				finalOffersObject.put("final_score", p);
 				finalOffersObject.put("modified_offer_score", p);
@@ -127,16 +119,36 @@ public class PostScoreRecommender {
 
 	}
 
-	private static JSONObject getExplore(JSONObject params, double epsilonIn, String name) {
-		double rand = MathRandomizer.getRandomDoubleBetweenRange(0, 1);
-		double epsilon = epsilonIn;
-		params.put(name + "_epsilon", epsilon);
-		if (rand <= epsilon) {
-			params.put(name, 1);
-		} else {
-			params.put(name, 0);
+	private static JSONArray getScoredDomains(JSONArray domains, JSONObject domainsProbabilityObj) {
+		JSONArray scoredDomains = new JSONArray();
+		HashSet<String> seen = new HashSet<>();
+
+		if (domains != null && !domains.isEmpty()) {
+			Object domainSource = domains.get(0);
+			if (domainSource instanceof JSONArray) {
+				JSONArray domainArray = (JSONArray) domainSource;
+				for (int i = 0; i < domainArray.length(); i++) {
+					addDomain(scoredDomains, seen, String.valueOf(domainArray.get(i)));
+				}
+			} else if (domainSource != null && domainSource.getClass().isArray()) {
+				int length = Array.getLength(domainSource);
+				for (int i = 0; i < length; i++) {
+					addDomain(scoredDomains, seen, String.valueOf(Array.get(domainSource, i)));
+				}
+			}
 		}
-		return params;
+
+		for (String domain : domainsProbabilityObj.keySet()) {
+			addDomain(scoredDomains, seen, domain);
+		}
+
+		return scoredDomains;
+	}
+
+	private static void addDomain(JSONArray scoredDomains, HashSet<String> seen, String domain) {
+		if (domain == null || domain.isBlank() || seen.contains(domain)) return;
+		seen.add(domain);
+		scoredDomains.put(domain);
 	}
 
 	/**
@@ -200,18 +212,23 @@ public class PostScoreRecommender {
 	public static JSONArray getSelectedPredictResultExploreExploit(JSONObject predictResult, int numberOffers, int explore) {
 		JSONArray offers = new JSONArray();
 		int resultLength = predictResult.getJSONArray("final_result").length();
+		HashSet<Integer> selectedRandomIndexes = new HashSet<>();
 
 		for (int j = 0, k = 0; j < resultLength; j++) {
 			JSONObject work = new JSONObject();
 			if (explore == 1) {
-				int rand = MathRandomizer.getRandomIntBetweenRange(0, resultLength - 1);
+				int rand;
+				do {
+					rand = MathRandomizer.getRandomIntBetweenRange(0, resultLength - 1);
+				} while (selectedRandomIndexes.contains(rand) && selectedRandomIndexes.size() < resultLength);
+				selectedRandomIndexes.add(rand);
 				work = predictResult.getJSONArray("final_result").getJSONObject(rand);
 			} else {
 				work = predictResult.getJSONArray("final_result").getJSONObject(j);
 			}
 
 			/* test if budget is enabled && spend_limit is greater than 0, if budget is disabled, then this will be 1.0 */
-			if (settings.getPredictorOfferBudget() != null) {
+			if (settings != null && settings.getPredictorOfferBudget() != null) {
 				/* if budget setting and there is budget to spend */
 				if (work.has("spend_limit")) {
 					if ((work.getDouble("spend_limit") > 0.0) | work.getDouble("spend_limit") == -1) {
@@ -240,6 +257,7 @@ public class PostScoreRecommender {
 	 */
 	private static JSONObject getTopScores(JSONObject params, JSONObject predictResult) {
 		int resultCount = 1;
+		/* "Number of Offers" is normalized into resultcount before post-scoring. */
 		if (params.has("resultcount")) resultCount = params.getInt("resultcount");
 		if (predictResult.getJSONArray("final_result").length() <= resultCount)
 			resultCount = predictResult.getJSONArray("final_result").length();

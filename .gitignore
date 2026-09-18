@@ -35,6 +35,7 @@ nbdist/**
 ### ecosystem Local client specifics ###
 ecosystem-ai-repo/**
 target/**
+run.sh
 
 ### Other ###
 .DS_Store

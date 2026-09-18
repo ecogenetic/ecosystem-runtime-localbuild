@@ -3,9 +3,9 @@ package com.ecosystem.plugin.customer;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.ecosystem.utils.DataTypeConversions;
 import com.ecosystem.utils.JSONArraySort;
+import hex.genmodel.easy.EasyPredictModelWrapper;
 import com.ecosystem.utils.log.LogManager;
 import com.ecosystem.utils.log.Logger;
-import hex.genmodel.easy.EasyPredictModelWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -204,7 +204,7 @@ public class PostScoreBasic extends PostScoreSuper {
 				finalOffersObject.put("offer_matrix", featuresObj);
 
 				/** Budget processing option, if it's set in the properties */
-				if (settings.getPredictorOfferBudget() != null) {
+				if (getSettings(params).getPredictorOfferBudget() != null) {
 					JSONObject budgetItem = obtainBudget(featuresObj, params.getJSONObject("featuresObj"), offer_value);
 					double budgetSpendLimit = budgetItem.getDouble("spend_limit");
 					finalOffersObject.put("spend_limit", budgetSpendLimit);

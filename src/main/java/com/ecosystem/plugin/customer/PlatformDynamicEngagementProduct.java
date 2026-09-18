@@ -77,25 +77,12 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 			JSONObject randomisation = optionParams.getJSONObject("randomisation");
 
 			/***************************************************************************************************/
-			/** Test if contextual variable is coming via api or feature store: API takes preference... */
-			if (!work.has("contextual_variable_one")) {
-				try {
-					String k = contextual_variables.optString("contextual_variable_one_name", "");
-					work.put("contextual_variable_one",
-							(!k.isEmpty() && featuresObj.has(k)) ? featuresObj.get(k) : work.getJSONArray("value").get(0));
-				} catch (Exception ignored) {
-					work.put("contextual_variable_one", "");
-				}
-			}
-
-			if (!work.has("contextual_variable_two")) {
-				try {
-					String k = contextual_variables.optString("contextual_variable_two_name", "");
-					work.put("contextual_variable_two",
-							(!k.isEmpty() && featuresObj.has(k)) ? featuresObj.get(k) : work.getJSONArray("value").get(1));
-				} catch (Exception ignored) {
-					work.put("contextual_variable_two", "");
-				}
+			/** API non-blank values win; else named feature-store fields; else first options-store cell. */
+			fillContextualVariablesFromFeatures(work, featuresObj, contextual_variables);
+			if (applyFirstAvailableContextualVariables(options, work)) {
+				params.put("contextual_variable_defaulted", true);
+				LOGGER.info("PlatformDynamicEngagement:I003: both contextual variables empty; defaulted to first options-store cell: "
+						+ work.opt("contextual_variable_one") + " / " + work.opt("contextual_variable_two"));
 			}
 			/***************************************************************************************************/
 
@@ -127,7 +114,7 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 			String contextual_variable_two = String.valueOf(work.get("contextual_variable_two"));
 
 			for (int j : optionsSequence) {
-				if (j > params.getInt("resultcount")) break;
+				if (offerIndex >= params.getInt("resultcount")) break;
 
 				JSONObject option = options.getJSONObject(j);
 
@@ -138,12 +125,12 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 				 */
 				/** GENERATE DEFAULT IF OPTION IS NOT IN OFFER MATRIX! */
 				String offer = option.getString("optionKey");
-				JSONObject product = offerMatrixWithKey.getJSONObject(option.getString("optionKey"));
-				if (!offerMatrixWithKey.has(option.getString("optionKey"))) {
+				if (!offerMatrixWithKey.has(offer)) {
 					JSONObject singleOffer = defaultOffer(offer);
-					offerMatrixWithKey.put(option.getString("optionKey"), singleOffer);
-					LOGGER.warn("BEWARE, DEFAULT OFFER GENERATED. IN OPTIONS STORE AND NOT OFFER MATRIX: " + option.getString("optionKey"));
+					offerMatrixWithKey.put(offer, singleOffer);
+					LOGGER.warn("BEWARE, DEFAULT OFFER GENERATED. IN OPTIONS STORE AND NOT OFFER MATRIX: " + offer);
 				}
+				JSONObject product = offerMatrixWithKey.getJSONObject(offer);
 
 				/* If eligibility list has been extracted from in_params, check that offer is eligible*/
 				boolean eligibility_from_params = true;
@@ -194,15 +181,20 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 
 							singleOffer = offerMatrixWithKey.getJSONObject(offer);
 
-							if (singleOffer.has("offer_price"))
-								offer_value = DataTypeConversions.getDouble(singleOffer, "offer_price");
-							if (singleOffer.has("price"))
-								offer_value = DataTypeConversions.getDouble(singleOffer, "price");
+							Double matrixPrice = extractOfferMatrixDouble(singleOffer, "offer_price", "price");
+							if (matrixPrice != null) {
+								offer_value = matrixPrice;
+							}
 
-							if (singleOffer.has("offer_cost"))
-								offer_cost = singleOffer.getDouble("offer_cost");
-							if (singleOffer.has("cost"))
-								offer_cost = singleOffer.getDouble("cost");
+							Double matrixCost = extractOfferMatrixDouble(singleOffer, "offer_cost", "cost");
+							if (matrixCost != null) {
+								offer_cost = matrixCost;
+							} else if (matrixPrice == null) {
+								LOGGER.error(
+										"PlatformDynamicEngagementProduct:E002: Offer matrix entry for '"
+												+ offer
+												+ "' has no usable price or cost fields.");
+							}
 
 							modified_offer_score = p * ((double) offer_value - offer_cost);
 						}
@@ -246,7 +238,7 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 					finalOffersObject.put("uuid", params.get("uuid"));
 					finalOffersObject.put("arm_reward", arm_reward);
 					finalOffersObject.put("learning_reward", learning_reward);
-					finalOffersObject.put("product", product);
+                    finalOffersObject.put("product", product);
 
 					/* Debugging variables */
 					if (!option.has("expected_takeup"))
@@ -271,8 +263,8 @@ public class PlatformDynamicEngagementProduct extends PostScoreSuper {
 
 			JSONArray sortJsonArray = JSONArraySort.sortArray(finalOffers, "arm_reward", "double", "d");
 			predictModelMojoResult.put("final_result", sortJsonArray);
-			/** Anything added to data will be pushed out to the api response */
-			predictModelMojoResult.put("data", new JSONObject().put("featuresObj", featuresObj));
+            /** Anything added to data will be pushed out to the api response */
+            predictModelMojoResult.put("data", new JSONObject().put("featuresObj", featuresObj));
 
 			predictModelMojoResult = getTopScores(params, predictModelMojoResult);
 
