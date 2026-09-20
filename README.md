@@ -9,13 +9,14 @@ A real-time and near-time prediction platform for enterprise behavioral analytic
 The ecosystem.Ai Runtime is a headless API-first platform that enables real-time scoring, recommendation generation, and behavioral tracking. It supports various ML algorithms including Multi-Armed Bandits (Thompson Sampling, Epsilon-Greedy), Naive Bayes, Q-Learning, and Neural Networks.
 
 **Version:** 0.9.7.0  
-**Build:** 2026-01.5343  
-**Java Version:** 17  
+**Build:** 2026-09.5343  
+**Java Version:** 17+  
 **Spring Boot Version:** 4.1.1
 
 ## Key Features
 
 - **Real-time Scoring**: Perform predictions using pre-loaded MOJO models (H2O AutoML, XGBoost, GLM) or HTTP sidecar models (`api:` / `api-ref:` in `mojo.key`)
+- **Offer matrix drivers**: MongoDB, Cassandra, REST, and Presto/Trino (Workbench `trino` uses the Presto JDBC worker at preload)
 - **Dynamic Algorithm Selection**: Dynamic Engagement approaches (`binaryThompson` default, epsilonGreedy, naiveBayes, behaviorAlgos, Network, QLearning)
 - **Two-Tower / similarity**: `predictor.model.type=similarity` with `PrePredictTwoTower` + `PostScoreTwoTower` (not a Dynamic Engagement `approach`)
 - **Multi-campaign**: Multiple use cases on one instance (`POST /refresh`, `/campaigns`, `POST /learning`)
@@ -49,33 +50,30 @@ MCP, ontology, dashboard static assets, scoring engine, and `ECOSYSTEM_ALGORITHM
 ### Plugin Types
 
 1. **Pre-Score Plugins** (`plugin.prescore`, see [Pre-Score Plugins](#pre-score-plugins)): Enrich `params` after the feature store and before scoring
-   - `DefaultPreScore` / `PrePredictCustomer`: Passthrough templates
-   - `PreScoreDynamic`: Contextual variables and virtual features
-   - `PreScoreLookup`: Recent contact/response history on `params`
-   - `PrePredictAutoDate`: Date-part features
-   - `PrePredictTwoTower`: User/item embeddings for similarity
-
+  - `DefaultPreScore` / `PrePredictCustomer`: Passthrough templates
+  - `PreScoreDynamic`: Contextual variables and virtual features
+  - `PreScoreLookup`: Recent contact/response history on `params`
+  - `PrePredictAutoDate`: Date-part features
+  - `PrePredictTwoTower`: User/item embeddings for similarity
 2. **Post-Score Plugins** (`plugin.postscore`, see [Post-Score Plugins](#post-score-plugins)): Turn scores into `final_result` offers
-   - `PlatformDynamicEngagement` / `PlatformDynamicEngagementProduct`: Dynamic Engagement (no MOJO)
-   - `PostScoreRecommender`, `PostScoreBasic`, `PostScoreRecommenderOffers`: MOJO recommenders
-   - `PostScoreNetwork` / `PostScoreNetworkSelector`: Network Selector (not PageRank `approach=Network`)
-   - `PostScoreTwoTower`: Two-Tower / similarity ranking
-   - `PostScoreSentimentalEquilibrium`: `behaviorAlgos` + `sentimentalEquilibrium`
-
-3. **Business Logic Plugins** (`plugin.business.*`): Custom business rules
-   - `BusinessLogic`: Main business logic router
-   - `BusinessLogicValueCalc`: Value calculations
-   - `BusinessLogicOfferGroups`: Offer grouping logic
-
-4. **Reward Plugins** (`plugin.reward.*`): Shape scoring and learning for Dynamic Engagement (see [Reward Plugins](#reward-plugins))
-   - `DefaultReward`: Binary accept/reject, no extra shaping (`reward=1.0`, `learning_reward=1.0`)
-   - `ExampleReward`: Template with cost/state reward tiers — copy this to start
-   - `BusinessLogicReward`: Delegates to business-logic functions via a `rewards_business_logic` corpus
-   - `QLearnRewardPlugin`: Worked Q-Learning example with state/action payoffs
+  - `PlatformDynamicEngagement` / `PlatformDynamicEngagementProduct`: Dynamic Engagement (no MOJO)
+  - `PostScoreRecommender`, `PostScoreBasic`, `PostScoreRecommenderOffers`: MOJO recommenders
+  - `PostScoreNetwork` / `PostScoreNetworkSelector`: Network Selector (not PageRank `approach=Network`)
+  - `PostScoreTwoTower`: Two-Tower / similarity ranking
+  - `PostScoreSentimentalEquilibrium`: `behaviorAlgos` + `sentimentalEquilibrium`
+3. **Business Logic Plugins** (`plugin.business.`*): Custom business rules
+  - `BusinessLogic`: Main business logic router
+  - `BusinessLogicValueCalc`: Value calculations
+  - `BusinessLogicOfferGroups`: Offer grouping logic
+4. **Reward Plugins** (`plugin.reward.`*): Shape scoring and learning for Dynamic Engagement (see [Reward Plugins](#reward-plugins))
+  - `DefaultReward`: Binary accept/reject, no extra shaping (`reward=1.0`, `learning_reward=1.0`)
+  - `ExampleReward`: Template with cost/state reward tiers — copy this to start
+  - `BusinessLogicReward`: Delegates to business-logic functions via a `rewards_business_logic` corpus
+  - `QLearnRewardPlugin`: Worked Q-Learning example with state/action payoffs
 
 ## Prerequisites
 
-- **Java 17** or higher
+- **Java 17** or higher (this overlay compiles to Java 17 bytecode; platform production images use Amazon Corretto 25)
 - **Maven 3.6+**
 - **MongoDB** (for feature store and logging)
 - **Cassandra** (optional, for whitelist and configuration)
@@ -321,12 +319,14 @@ If pre-score fails to load, the runtime logs `Pre-score plugin not loaded — ch
 
 ### What you can change
 
-| On `params` | Typical use |
-| --- | --- |
-| `in_params` | Set `contextual_variable_one` / `contextual_variable_two` for Dynamic Engagement cells |
-| `featuresObj` | Add or transform feature-store fields the model will score |
+
+| On `params`       | Typical use                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| `in_params`       | Set `contextual_variable_one` / `contextual_variable_two` for Dynamic Engagement cells     |
+| `featuresObj`     | Add or transform feature-store fields the model will score                                 |
 | `input` / `value` | Keep in lockstep with `featuresObj` when you add features (`PrePredictAutoDate` does this) |
-| New keys | Carry lookup results to post-score (for example `prescore_data_lookup`) |
+| New keys          | Carry lookup results to post-score (for example `prescore_data_lookup`)                    |
+
 
 Do not remove `uuid`, `userid`, `lookup`, `resultcount`, or `explore`. Return `params` even on error (never null).
 
@@ -340,14 +340,16 @@ Rebuild the localbuild JAR after changing Java. A properties-only class-name cha
 
 ### Which shipped class to use
 
-| Class | Use when | Notes |
-| --- | --- | --- |
-| `DefaultPreScore` | You need a no-op or a class to copy | Extends `PreScoreSuper`. Safest starting point. |
-| `PrePredictCustomer` | Same passthrough, without `PreScoreSuper` helpers | Empty template; prefer `DefaultPreScore` for new work. |
-| `PreScoreDynamic` | Contextual variables or virtual features come from a lookup table | Mongo signature. Set `predictor.param.lookup` with `dynamic_lookup`. Calls `getDynamicSettings` and `getPrepopulateContextualVariables`. |
-| `PreScoreLookup` | Post-score needs recent contacts and responses | Mongo signature. Writes `params.prescore_data_lookup` (`resultArrayContacts`, `resultArrayResponses`). |
-| `PrePredictAutoDate` | The model expects date parts (hour, day-of-week, weekend, …) | Adds `datetime_*` fields to `featuresObj` and mirrors them onto `input` / `value`. |
-| `PrePredictTwoTower` | `predictor.model.type=similarity` | Mongo signature. Loads user/item embeddings for `PostScoreTwoTower`. Pair with that post-score class. |
+
+| Class                | Use when                                                          | Notes                                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `DefaultPreScore`    | You need a no-op or a class to copy                               | Extends `PreScoreSuper`. Safest starting point.                                                                                          |
+| `PrePredictCustomer` | Same passthrough, without `PreScoreSuper` helpers                 | Empty template; prefer `DefaultPreScore` for new work.                                                                                   |
+| `PreScoreDynamic`    | Contextual variables or virtual features come from a lookup table | Mongo signature. Set `predictor.param.lookup` with `dynamic_lookup`. Calls `getDynamicSettings` and `getPrepopulateContextualVariables`. |
+| `PreScoreLookup`     | Post-score needs recent contacts and responses                    | Mongo signature. Writes `params.prescore_data_lookup` (`resultArrayContacts`, `resultArrayResponses`).                                   |
+| `PrePredictAutoDate` | The model expects date parts (hour, day-of-week, weekend, …)      | Adds `datetime_*` fields to `featuresObj` and mirrors them onto `input` / `value`.                                                       |
+| `PrePredictTwoTower` | `predictor.model.type=similarity`                                 | Mongo signature. Loads user/item embeddings for `PostScoreTwoTower`. Pair with that post-score class.                                    |
+
 
 ### Contract (custom Java)
 
@@ -419,11 +421,13 @@ Reward plugins (next section) only multiply `arm_reward` and weight learning. Th
 
 Each item in `final_result` needs at least:
 
-| Field | Role |
-| --- | --- |
-| `offer` / `offer_name` | Identity used later on `POST /response` |
-| `score` | Base score (model probability or `arm_reward`) |
-| `uuid` | Same uuid as the invoke, so `/response` can match the row |
+
+| Field                  | Role                                                      |
+| ---------------------- | --------------------------------------------------------- |
+| `offer` / `offer_name` | Identity used later on `POST /response`                   |
+| `score`                | Base score (model probability or `arm_reward`)            |
+| `uuid`                 | Same uuid as the invoke, so `/response` can match the row |
+
 
 Common extras: `modified_offer_score`, `offer_value`, `price`, `cost`, `alpha`, `beta`, `arm_reward`, `learning_reward`. Call `getTopScores(params, predictModelMojoResult)` before returning when using explore/exploit (skip only for Network Selector `lookup_passthrough`).
 
@@ -439,33 +443,39 @@ plugin.postscore=com.ecosystem.plugin.customer.PlatformDynamicEngagement
 
 **Dynamic Engagement (no MOJO in the hot path)**
 
-| Class | Use when | Notes |
-| --- | --- | --- |
-| `PlatformDynamicEngagement` | `binaryThompson`, `epsilonGreedy`, `naiveBayes`, `QLearning`, `Network` (PageRank), most `behaviorAlgos` | Iterates Dynamic Engagement options, applies contextual-variable filter, sorts by `arm_reward`. Default for learning campaigns. |
-| `PlatformDynamicEngagementProduct` | Same, but each offer should include a `product` object from the offer matrix | Same loop; adds product payload. |
-| `PostScoreSentimentalEquilibrium` | `behaviorAlgos` + `sub_approach=sentimentalEquilibrium` | Formats pre-computed equilibrium scores. Not a per-offer bandit. |
+
+| Class                              | Use when                                                                                                 | Notes                                                                                                                           |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `PlatformDynamicEngagement`        | `binaryThompson`, `epsilonGreedy`, `naiveBayes`, `QLearning`, `Network` (PageRank), most `behaviorAlgos` | Iterates Dynamic Engagement options, applies contextual-variable filter, sorts by `arm_reward`. Default for learning campaigns. |
+| `PlatformDynamicEngagementProduct` | Same, but each offer should include a `product` object from the offer matrix                             | Same loop; adds product payload.                                                                                                |
+| `PostScoreSentimentalEquilibrium`  | `behaviorAlgos` + `sub_approach=sentimentalEquilibrium`                                                  | Formats pre-computed equilibrium scores. Not a per-offer bandit.                                                                |
+
 
 **MOJO / model recommenders**
 
-| Class | Use when | Notes |
-| --- | --- | --- |
-| `PostScoreBasic` | Generic template: clustering, regression, multinomial, anomaly, Cox, embeddings | Copy this for a new model-backed campaign. |
-| `PostScoreBasicOfferMatrix` | Same as basic, with pricing from the offer matrix | |
-| `PostScoreBasicParallel` | Post-score needs an async/external runtime call | Uses `ExternalRuntimeAsync`. |
-| `PostScoreRecommender` | Multiclass/binomial model whose labels are offers | Builds `final_result` from scored domains. |
-| `PostScoreRecommenderOffers` | One multiclass model + offer matrix (`offer_price`) | All offers in the matrix; model trained on `offer_name`. |
-| `PostScoreRecommenderMulti` | One binomial MOJO **per product** | Scores each offer-matrix row with its own in-memory model. |
-| `PostScoreRecommenderProduct` | Product recommender that should carry product fields | Personality-series template. |
+
+| Class                         | Use when                                                                        | Notes                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `PostScoreBasic`              | Generic template: clustering, regression, multinomial, anomaly, Cox, embeddings | Copy this for a new model-backed campaign.                 |
+| `PostScoreBasicOfferMatrix`   | Same as basic, with pricing from the offer matrix                               |                                                            |
+| `PostScoreBasicParallel`      | Post-score needs an async/external runtime call                                 | Uses `ExternalRuntimeAsync`.                               |
+| `PostScoreRecommender`        | Multiclass/binomial model whose labels are offers                               | Builds `final_result` from scored domains.                 |
+| `PostScoreRecommenderOffers`  | One multiclass model + offer matrix (`offer_price`)                             | All offers in the matrix; model trained on `offer_name`.   |
+| `PostScoreRecommenderMulti`   | One binomial MOJO **per product**                                               | Scores each offer-matrix row with its own in-memory model. |
+| `PostScoreRecommenderProduct` | Product recommender that should carry product fields                            | Personality-series template.                               |
+
 
 **Routing, similarity, domain examples**
 
-| Class | Use when | Notes |
-| --- | --- | --- |
-| `PostScoreNetwork` | Network Selector: route this customer to another runtime by a feature (`switch_key`) | Needs `network` + `network_config` corpora. **Not** PageRank `approach=Network`. |
-| `PostScoreNetworkSelector` | Network Selector: route by the **scored offer** (`type=model_selector`) | Same corpora; `switch_key` is unused. |
-| `PostScoreTwoTower` | `predictor.model.type=similarity` | Pair with `PrePredictTwoTower`. Cosine/dot-product ranking. |
-| `PostScoreSpam` | Spam vs ham classifier | Domain example; copy only if that is the use case. |
-| `PostScoreSpendingPersonality` | Spend Personality via REST | Domain example; not a generic recommender. |
+
+| Class                          | Use when                                                                             | Notes                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `PostScoreNetwork`             | Network Selector: route this customer to another runtime by a feature (`switch_key`) | Needs `network` + `network_config` corpora. **Not** PageRank `approach=Network`. |
+| `PostScoreNetworkSelector`     | Network Selector: route by the **scored offer** (`type=model_selector`)              | Same corpora; `switch_key` is unused.                                            |
+| `PostScoreTwoTower`            | `predictor.model.type=similarity`                                                    | Pair with `PrePredictTwoTower`. Cosine/dot-product ranking.                      |
+| `PostScoreSpam`                | Spam vs ham classifier                                                               | Domain example; copy only if that is the use case.                               |
+| `PostScoreSpendingPersonality` | Spend Personality via REST                                                           | Domain example; not a generic recommender.                                       |
+
 
 ### Contract (custom Java)
 
@@ -561,12 +571,14 @@ Do not confuse this with the platform's internal `RewardStrategy` (Thompson samp
 
 ### What the two values do
 
-| Field | When it applies | Effect |
-| --- | --- | --- |
-| `reward` | Score time (`POST /invocations`) | Multiplies the algorithm propensity: `arm_reward = propensity * reward`. Higher values rank that option higher. |
-| `learning_reward` | Learning (`POST /response` + rolling process) | Weights that historical interaction. Larger values move α/β (or the Q-table) more. |
-| `learning_for_contacts` | Learning | Optional. If `true`, presentations (contacts) are weighted by `learning_reward`. Default `false`. |
-| `learning_for_responses` | Learning | Optional. If `true`, accepts (`POST /response`) are weighted by `learning_reward`. `BusinessLogicReward` sets this to `true`. |
+
+| Field                    | When it applies                               | Effect                                                                                                                        |
+| ------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `reward`                 | Score time (`POST /invocations`)              | Multiplies the algorithm propensity: `arm_reward = propensity * reward`. Higher values rank that option higher.               |
+| `learning_reward`        | Learning (`POST /response` + rolling process) | Weights that historical interaction. Larger values move α/β (or the Q-table) more.                                            |
+| `learning_for_contacts`  | Learning                                      | Optional. If `true`, presentations (contacts) are weighted by `learning_reward`. Default `false`.                             |
+| `learning_for_responses` | Learning                                      | Optional. If `true`, accepts (`POST /response`) are weighted by `learning_reward`. `BusinessLogicReward` sets this to `true`. |
+
 
 `DefaultReward` leaves both multipliers at `1.0`, so ranking and learning stay as the algorithm computed them. Use a custom plugin when a conversion is not worth the same as every other conversion — for example margin, cost, VIP, or a sequential Q-Learning payoff.
 
@@ -584,12 +596,14 @@ Rebuild the localbuild JAR after changing Java. A properties-only class-name cha
 
 ### Which shipped class to use
 
-| Class | Use when | Notes |
-| --- | --- | --- |
-| `DefaultReward` | Binary take-up (accept = 1, ignore = 0) is enough | Safest starting point. No corpora required. |
-| `ExampleReward` | You need a Java template to copy | Replace the placeholder `cost` / `category` / `state` reads with feature-store, offer-matrix, or corpora values. |
-| `BusinessLogicReward` | Rewards should be configurable without a new Java class | Requires additional corpora named `rewards_business_logic` (Mongo key `type`). Falls back to `1.0` / `1.0` and logs if the corpus is missing. |
-| `QLearnRewardPlugin` | `randomisation.approach=QLearning` and payoffs depend on state and action | Worked example (telecom-style `copcar` / `previous_day_mbs`). Copy and adapt; do not point a generic recommender at this class. |
+
+| Class                 | Use when                                                                  | Notes                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DefaultReward`       | Binary take-up (accept = 1, ignore = 0) is enough                         | Safest starting point. No corpora required.                                                                                                   |
+| `ExampleReward`       | You need a Java template to copy                                          | Replace the placeholder `cost` / `category` / `state` reads with feature-store, offer-matrix, or corpora values.                              |
+| `BusinessLogicReward` | Rewards should be configurable without a new Java class                   | Requires additional corpora named `rewards_business_logic` (Mongo key `type`). Falls back to `1.0` / `1.0` and logs if the corpus is missing. |
+| `QLearnRewardPlugin`  | `randomisation.approach=QLearning` and payoffs depend on state and action | Worked example (telecom-style `copcar` / `previous_day_mbs`). Copy and adapt; do not point a generic recommender at this class.               |
+
 
 ### `BusinessLogicReward` corpus
 
@@ -778,31 +792,28 @@ mvn test
 ### Common Issues
 
 1. **MongoDB Connection Failed**
-   - Verify MongoDB is running
-   - Check connection string in `ecosystem.properties`
-   - Verify network connectivity
-
+  - Verify MongoDB is running
+  - Check connection string in `ecosystem.properties`
+  - Verify network connectivity
 2. **Model Not Found**
-   - Ensure MOJO files are in `user.generated.models` directory
-   - Verify `mojo.key` in `ecosystem.properties` matches file names
-
+  - Ensure MOJO files are in `user.generated.models` directory
+  - Verify `mojo.key` in `ecosystem.properties` matches file names
 3. **Plugin Not Loading**
-   - Verify class name in `ecosystem.properties`
-   - Check classpath includes plugin classes
-   - Verify plugin extends correct base class
-
+  - Verify class name in `ecosystem.properties`
+  - Check classpath includes plugin classes
+  - Verify plugin extends correct base class
 4. **Port Already in Use**
-   - Change `SERVER_PORT` environment variable
-   - Or modify port in application configuration
+  - Change `SERVER_PORT` environment variable
+  - Or modify port in application configuration
 
 ## License
 
-ecosystem.Ai 1.0 - See <https://ecosystem.Ai> for details
+ecosystem.Ai 1.0 - See [https://ecosystem.Ai](https://ecosystem.Ai) for details
 
 ## Support
 
-- **Documentation**: <https://developerecosystem.ai>
-- **Website**: <https://ecosystem.Ai>
+- **Documentation**: [https://developer.ecosystem.ai](https://developer.ecosystem.ai)
+- **Website**: [https://ecosystem.Ai](https://ecosystem.Ai)
 - **API Documentation**: Available at `/swagger-ui.html` when running
 
 ## Contributing
@@ -818,4 +829,4 @@ When contributing:
 
 ---
 
-**Built with Spring Boot 4.1.1 | Java 17 | ecosystem.Ai Platform 0.9.7.0**
+**Built with Spring Boot 4.1.1 | Java 17+ | ecosystem.Ai Platform 0.9.7.0 (build 2026-09.5343)**

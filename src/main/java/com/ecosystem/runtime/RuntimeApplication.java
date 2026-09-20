@@ -108,7 +108,7 @@ public class RuntimeApplication {
 		}
 
 		System.out.println("============================================================");
-		System.out.println("Version: 0.9.7.0 Build: 2026-01.5343");
+		System.out.println("Version: 0.9.7.0 Build: 2026-09.5343");
 		System.out.println("============================================================");
 
 		Calendar c = Calendar.getInstance();
@@ -203,7 +203,7 @@ public class RuntimeApplication {
 						.description("The ecosystem.Ai Client Pulse Responder Engine brings the power of real-time and near-time predictions to the enterprise. Implement your behavioral construct " +
 								"and core hypotheses through a configurable prediction platform. If you don't know how the model is going to behave, use our behavioral tracker" +
 										"to assist with selection and exploit the most successful options.")
-						.version("v0.9.7")
+						.version("v0.9.7.0")
 						.license(new License().name("ecosystem.Ai 1.0").url("https://ecosystem.ai")))
 						.externalDocs(new ExternalDocumentation()
 						.description("Learn Ecosystem")
