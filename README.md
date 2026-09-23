@@ -470,8 +470,8 @@ plugin.postscore=com.ecosystem.plugin.customer.PlatformDynamicEngagement
 
 | Class                          | Use when                                                                             | Notes                                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `PostScoreNetwork`             | Network Selector: route this customer to another runtime by a feature (`switch_key`) | Needs `network` + `network_config` corpora. **Not** PageRank `approach=Network`. |
-| `PostScoreNetworkSelector`     | Network Selector: route by the **scored offer** (`type=model_selector`)              | Same corpora; `switch_key` is unused.                                            |
+| `PostScoreNetwork`             | Network Selector: route this customer to another runtime by a feature (`switch_key`) | Needs `network` + `network_config` corpora. Nested hops use `in_params.ecosystem_network_path`. `experiment_selector` supports N-group allocations. **Not** PageRank `approach=Network`. |
+| `PostScoreNetworkSelector`     | Network Selector: route by the **scored offer** (`type=model_selector`)              | Same corpora; `switch_key` is unused. Nested hops use `in_params.ecosystem_network_path`. |
 | `PostScoreTwoTower`            | `predictor.model.type=similarity`                                                    | Pair with `PrePredictTwoTower`. Cosine/dot-product ranking.                      |
 | `PostScoreSpam`                | Spam vs ham classifier                                                               | Domain example; copy only if that is the use case.                               |
 | `PostScoreSpendingPersonality` | Spend Personality via REST                                                           | Domain example; not a generic recommender.                                       |
