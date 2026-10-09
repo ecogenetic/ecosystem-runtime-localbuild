@@ -60,7 +60,8 @@ MCP, ontology, dashboard static assets, scoring engine, and `ECOSYSTEM_ALGORITHM
   - `PostScoreRecommender`, `PostScoreBasic`, `PostScoreRecommenderOffers`: MOJO recommenders
   - `PostScoreNetwork` / `PostScoreNetworkSelector`: Network Selector (not PageRank `approach=Network`)
   - `PostScoreTwoTower`: Two-Tower / similarity ranking
-  - `PostScoreSentimentalEquilibrium`: `behaviorAlgos` + `sentimentalEquilibrium`
+  - `PostScoreSentimentalEquilibrium`: live `behaviorAlgos` + `sentimentalEquilibrium` (options-store `arm_reward`)
+  - `PostScoreSentimentalEquilibriumPreScored`: Workbench SE algorithm job already on the feature store (`engagementScore`, `sentimental_equilibrium`, …)
 3. **Business Logic Plugins** (`plugin.business.`*): Custom business rules
   - `BusinessLogic`: Main business logic router
   - `BusinessLogicValueCalc`: Value calculations
@@ -448,7 +449,7 @@ plugin.postscore=com.ecosystem.plugin.customer.PlatformDynamicEngagement
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `PlatformDynamicEngagement`        | `binaryThompson`, `epsilonGreedy`, `naiveBayes`, `QLearning`, `Network` (PageRank), most `behaviorAlgos` | Iterates Dynamic Engagement options, applies contextual-variable filter, sorts by `arm_reward`. Default for learning campaigns. |
 | `PlatformDynamicEngagementProduct` | Same, but each offer should include a `product` object from the offer matrix                             | Same loop; adds product payload.                                                                                                |
-| `PostScoreSentimentalEquilibrium`  | `behaviorAlgos` + `sub_approach=sentimentalEquilibrium`                                                  | Formats pre-computed equilibrium scores. Not a per-offer bandit.                                                                |
+| `PostScoreSentimentalEquilibrium`  | Live `behaviorAlgos` + `sub_approach=sentimentalEquilibrium`                                              | Ranks offers from options-store `arm_reward` (`score()` response-rate utility). Not the Workbench contact-rate job. |
 
 
 **MOJO / model recommenders**
@@ -475,6 +476,7 @@ plugin.postscore=com.ecosystem.plugin.customer.PlatformDynamicEngagement
 | `PostScoreTwoTower`            | `predictor.model.type=similarity`                                                    | Pair with `PrePredictTwoTower`. Cosine/dot-product ranking.                      |
 | `PostScoreSpam`                | Spam vs ham classifier                                                               | Domain example; copy only if that is the use case.                               |
 | `PostScoreSpendingPersonality` | Spend Personality via REST                                                           | Domain example; not a generic recommender.                                       |
+| `PostScoreSentimentalEquilibriumPreScored` | Workbench `/sentimental-equilibrium` (or Process) already wrote SE fields onto the feature store | Same pattern as spend personality: copy `engagementScore` → `score`, `sentimental_equilibrium` → `offer`. Do **not** pair with live `behaviorAlgos`. |
 
 
 ### Contract (custom Java)
