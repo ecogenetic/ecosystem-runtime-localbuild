@@ -264,7 +264,8 @@ You only run **one** pre-score class and **one** post-score class per campaign. 
 | Online learning recommender (default) | `PreScoreDynamic` | `PlatformDynamicEngagement` | `DefaultReward` | `randomisation.approach=binaryThompson`; close the loop with `/response` |
 | Same, but return offer-matrix product JSON | `PreScoreDynamic` | `PlatformDynamicEngagementProduct` | `DefaultReward` | Offer matrix loaded |
 | Sequential journeys | `PreScoreDynamic` | `PlatformDynamicEngagement` | Custom / `QLearnRewardPlugin` | `approach=QLearning`; Lookup Parameters |
-| Engagement fatigue (not NBO) | `PreScoreDynamic` | **`PostScoreSentimentalEquilibrium`** | `DefaultReward` | `behaviorAlgos` + `sentimentalEquilibrium` |
+| Offer rank from sentimental utility | `PreScoreDynamic` | **`PostScoreSentimentalEquilibrium`** | `DefaultReward` | Live `behaviorAlgos` + `sentimentalEquilibrium`. Contact rate is Workbench `/sentimental-equilibrium`. |
+| Serve a Workbench SE algorithm job | `DefaultPreScore` | **`PostScoreSentimentalEquilibriumPreScored`** | unused | Feature store already has `engagementScore` / `sentimental_equilibrium`. Not live `behaviorAlgos`. |
 | One H2O/sidecar model | `DefaultPreScore` or `PrePredictAutoDate` | `PostScoreBasic` | unused | `mojo.key` |
 | Model labels are offers | `DefaultPreScore` | `PostScoreRecommender` | unused | Multiclass/binomial MOJO |
 | One model + offer matrix prices | `DefaultPreScore` | `PostScoreRecommenderOffers` | unused | Offer matrix with `offer_price` |
@@ -301,7 +302,8 @@ You only run **one** pre-score class and **one** post-score class per campaign. 
 | --- | --- | --- | --- | --- |
 | `PlatformDynamicEngagement` | Almost all DE `approach` values | `PreScoreDynamic` | Iterate options, filter with `compareContextualVariableValues`, sort by `arm_reward`, call `getTopScores`. Eligibility via `in_params.eligible_offers`. Pricing from offer matrix. | Do not re-implement Thompson. Do not use for Two-Tower, Network Selector, or sentimental equilibrium. |
 | `PlatformDynamicEngagementProduct` | Same, plus a `product` object per offer | `PreScoreDynamic` | Same loop; copies offer-matrix document onto each row. | Do not use if the caller only needs offer name + score. |
-| `PostScoreSentimentalEquilibrium` | `behaviorAlgos` + `sentimentalEquilibrium` | `PreScoreDynamic` | Formats pre-computed equilibrium scores. | Do not use this to rank a catalog of offers. |
+| `PostScoreSentimentalEquilibrium` | Live `behaviorAlgos` + `sentimentalEquilibrium` | `PreScoreDynamic` | Formats options-store `arm_reward` from `score()` (response-rate utility). | Do not treat `arm_reward` as the contact rate. Do not use for a Workbench SE job already on the feature store. |
+| `PostScoreSentimentalEquilibriumPreScored` | Workbench `/sentimental-equilibrium` (or Process) pre-scored onto the feature store | `DefaultPreScore` | Copies `engagementScore` → `score`, `sentimental_equilibrium` → `offer` / `offer_name`. Never reads options or `arm_reward`. | Do not pair with live `behaviorAlgos`. |
 | `PostScoreBasic` | Generic MOJO (cluster, regression, multinomial, anomaly, Cox, embedding) | `DefaultPreScore` / `PrePredictAutoDate` | Copy this. Map `predictModelMojoResult.type` onto `offer` / `score`. Always `getTopScores`. | Do not use for DE options-store ranking. |
 | `PostScoreBasicOfferMatrix` | MOJO + prices/costs from offer matrix | `DefaultPreScore` | Same as basic; read `offerMatrixWithKey`. | |
 | `PostScoreBasicParallel` | Post-score must call another runtime/API | `DefaultPreScore` | Uses `ExternalRuntimeAsync`. Timeouts belong here, not in the controller. | Do not block the invoke on an unbounded HTTP call. |
@@ -369,7 +371,7 @@ Use `PlatformDynamicEngagementProduct` when each offer must include the offer-ma
 | `behaviorAlgos` | `coverageAwareThompson` | `PlatformDynamicEngagement` | Thompson + long-tail boost on options |
 | `behaviorAlgos` | `longTailBoostMF` | `PlatformDynamicEngagement` | WRMF scores on options |
 | `behaviorAlgos` | `generative` | `PlatformDynamicEngagement` | LLM JSON scores stamped onto options; needs `randomisation.prompt` |
-| `behaviorAlgos` | `sentimentalEquilibrium` | **`PostScoreSentimentalEquilibrium`** | Aggregate effort/sentiment — **not** per-offer NBO. Do not use `PlatformDynamicEngagement` expecting offer ranks |
+| `behaviorAlgos` | `sentimentalEquilibrium` | **`PostScoreSentimentalEquilibrium`** | Ranks offers from response-rate utility. `arm_reward` is not the engagement rate (`computeEquilibrium()` / Workbench batch). |
 
 `PlatformDynamicEngagement` is the post-score for almost every learning campaign because the rolling process has already written `arm_reward`. The plugin’s job is eligibility, pricing, and `getTopScores`, not re-implementing Thompson.
 
@@ -468,7 +470,7 @@ Q-Learning also: `learning_rate` 0.25, `discount_factor` 0.75, `random_action` 0
 
 **`prospectTheory`** — Seeds all offers, then adaptive drift. Slower to a single winner. Post-score: standard DE loop.
 
-**`sentimentalEquilibrium`** — Contact fatigue / effort, **not** next-best-offer. Post-score **must** be `PostScoreSentimentalEquilibrium`. If you need offer ranks, pick a bandit instead.
+**`sentimentalEquilibrium`** — Live `score()` ranks offers from response-rate utility. The sustaining engagement rate is `computeEquilibrium()` and the Workbench job at `/sentimental-equilibrium`; `score()` does not read it. Live Dynamic Engagement post-score **must** be `PostScoreSentimentalEquilibrium`. If Process already wrote SE fields onto the feature store, use `PostScoreSentimentalEquilibriumPreScored` instead (not this `approach`). Do not treat `arm_reward` as the contact rate.
 
 **`coverageAwareThompson`** — “Unpopular recommender.” Coverage KPI will **slow** concentration on the global best. Post-score: standard DE loop; do not also crank ε if the boost is enough.
 
@@ -566,7 +568,7 @@ Heuristic: **variable behaviour over time → dynamic**. **Stable behaviour + ba
 4. **Pre-score prepares, post-score decides, reward values** — ranking and `/response` identity (`offer_name`, `uuid`) belong in post-score. Training updates belong in rolling + reward, not in post-score.
 5. **Contextual cells vs many features** — 0–2 discrete cells → `binaryThompson`. Many discrete attributes → `naiveBayes` + Lookup Parameters. Embeddings → Two-Tower, not extra contextual variables.
 6. **Network Selector vs `Network`** — Selector is a **routing** design (another runtime URL). `approach=Network` is **PageRank on co-presented offers** inside one DE campaign.
-7. **Sentimental equilibrium is not NBO** — if the KPI is offer rank, do not pick `sentimentalEquilibrium`. If the KPI is contact effort, do not use `PlatformDynamicEngagement`.
+7. **Sentimental equilibrium rank vs rate** — runtime `arm_reward` ranks offers. The contact rate is Workbench `/sentimental-equilibrium`, not `PlatformDynamicEngagement`.
 8. **Static + dynamic later** — a valid sequence is: ship a MOJO (`PostScoreBasic`), collect `/invocations` logs, then stand up a DE campaign on the same offers. Do not expect the static campaign’s post-score to read the options store.
 
 ### Choosing a Dynamic `approach` (after the family is DE)
@@ -622,7 +624,7 @@ If post-score is `PostScoreNetwork*`, you are reviewing a **router**, not the do
 
 1. Confirm closed loop: sample invokes and check `ecosystemruntime_response` for the same `uuid` + `offer_name`.
 2. Confirm rolling: `monitoring.delay` or `POST /learning`; options documents have fresh `date` / counts.
-3. Confirm approach vs intent (table in [§10](#10-design-decisions)). Wrong family (e.g. `sentimentalEquilibrium` used as NBO) is a design defect, not a tuning issue.
+3. Confirm approach vs intent (table in [§10](#10-design-decisions)). Treating `sentimentalEquilibrium` `arm_reward` as the contact rate is a design defect, not a tuning issue.
 4. Read options store: `logging_count`, `response_count`, `alpha`, `beta`, `propensity`, `arm_reward`, `weighting`, `training_cell`.
 5. Compute take-up = responses / presentations **in the processing window** (not all-time).
 6. Check exploration: deployment `predictor.epsilon` vs algorithm ε vs (for `epsilonGreedy`) the policy ε. If all three are high, the model cannot exploit.

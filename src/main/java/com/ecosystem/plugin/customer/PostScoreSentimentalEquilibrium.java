@@ -10,11 +10,15 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Post-score plugin for Sentimental Equilibrium dynamic engagement.
+ * Post-score for <em>live</em> dynamic Sentimental Equilibrium ranking.
  *
- * Reads pre-computed arm_reward scores from the dynamic engagement options
- * (populated by SentimentalEquilibrium.score() via RollingBehavior) and
- * formats them into the standard final_result structure.
+ * <p>Reads {@code arm_reward} from the dynamic-engagement options store after
+ * {@code SentimentalEquilibrium.score()} via {@code RollingBehavior}
+ * ({@code approach=behaviorAlgos}, {@code sub_approach=sentimentalEquilibrium}).
+ *
+ * <p><b>Do not use</b> for Workbench Sentimental Equilibrium Process / batch job
+ * scores on the feature store — that static path is
+ * {@link PostScoreSentimentalEquilibriumPreScored}.
  *
  * Follows the same pattern as PostScoreDynamicInteractionParameterised.
  */
