@@ -1174,19 +1174,26 @@ public class ProductMaster extends ProductMasterSuper {
     }
 
     /**
-     * Update offers taken up by customers/msisdn
+     * Update offers taken up by customers/msisdn.
      *
+     * @deprecated Use {@code POST /invocations} for scoring and {@code POST /response}
+     *             (singular) with {@code uuid} + {@code offer_name} for closed-loop feedback.
      * @param documentJSON documentJSON
      * @return Result
      */
-    @Operation(description = "Update response based on recommendation accepted (Async): " +
-            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
-            "", summary = "Generic prediction scoring endine for recommenders.")
+    @Deprecated
+    @Operation(
+            deprecated = true,
+            description = "DEPRECATED. Migrate scoring to POST /invocations; for accept/feedback "
+                    + "use POST /response with uuid + offer_name (do not use PUT /offerRecommendations). "
+                    + "Legacy async accept body example: "
+                    + "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}",
+            summary = "DEPRECATED — use POST /invocations then POST /response")
     @RequestMapping(value = "/offerRecommendations",  method = RequestMethod.PUT)
     @ResponseStatus(HttpStatus.OK)
     public String putOfferRecommendations(@RequestHeader Map<String, String> headers,
                                           @RequestParam(name = "document", defaultValue = "") String documentJSON) throws IOException, ParseException {
-        LOGGER.info("/offerRecommendations PUT API");
+        LOGGER.info("/offerRecommendations PUT API (deprecated; use POST /invocations + POST /response)");
         LOGGER.info(documentJSON);
 
         String response = "Success";
@@ -1202,19 +1209,26 @@ public class ProductMaster extends ProductMasterSuper {
     }
 
     /**
-     * Update offers taken up by customers/msisdn
+     * Update offers taken up by customers/msisdn.
      *
+     * @deprecated Use {@code POST /invocations} for scoring and {@code POST /response}
+     *             (singular) with {@code uuid} + {@code offer_name} for closed-loop feedback.
      * @param documentJSON documentJSON
      * @return Result
      */
-    @Operation(description = "Update response based on recommendation accepted and returns valid result: " +
-            "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}" +
-            "", summary = "Generic prediction scoring endine for recommenders.")
+    @Deprecated
+    @Operation(
+            deprecated = true,
+            description = "DEPRECATED. Migrate scoring to POST /invocations; for accept/feedback "
+                    + "use POST /response with uuid + offer_name (do not use PUT /offerRecommendationsResult). "
+                    + "Legacy accept body example: "
+                    + "{\"uuid\": \"dcb54a23-0737-4768-845d-48162598c0f7\", \"offers_accepted\": [{\"offer_name\": \"OFFER_A\"}], \"channel_name\": \"app\"}",
+            summary = "DEPRECATED — use POST /invocations then POST /response")
     @RequestMapping(value = "/offerRecommendationsResult",  method = RequestMethod.PUT)
     @ResponseStatus(HttpStatus.OK)
     public String putOfferRecommendationsResult(@RequestHeader Map<String, String> headers,
                                                 @RequestParam(name = "document", defaultValue = "") String documentJSON) throws IOException, ParseException {
-        LOGGER.info("/offerRecommendationsResult PUT API");
+        LOGGER.info("/offerRecommendationsResult PUT API (deprecated; use POST /invocations + POST /response)");
         LOGGER.info(documentJSON);
 
         String response;
