@@ -19,6 +19,7 @@ The ecosystem.Ai Runtime is a headless API-first platform that enables real-time
 - **Offer matrix drivers**: MongoDB, Cassandra, REST, and Presto/Trino (Workbench `trino` uses the Presto JDBC worker at preload)
 - **Dynamic Algorithm Selection**: Dynamic Engagement approaches (`binaryThompson` default, epsilonGreedy, naiveBayes, behaviorAlgos, Network, QLearning)
 - **Two-Tower / similarity**: `predictor.model.type=similarity` with `PrePredictTwoTower` + `PostScoreTwoTower` (not a Dynamic Engagement `approach`)
+- **LoRA**: `predictor.model.type=lora` with `PrePredictLoRA` + `PostScoreLoRA` and `predictor.lora.*` (not Two-Tower, not a DE `approach`)
 - **Multi-campaign**: Multiple use cases on one instance (`POST /refresh`, `/campaigns`, `POST /learning`)
 - **MCP**: In-process Model Context Protocol at `POST /mcp` (protocol 2026-07-28)
 - **Ontology**: Runtime closed-loop vocabulary at `/ontology/runtime`
@@ -55,11 +56,13 @@ MCP, ontology, dashboard static assets, scoring engine, and `ECOSYSTEM_ALGORITHM
   - `PreScoreLookup`: Recent contact/response history on `params`
   - `PrePredictAutoDate`: Date-part features
   - `PrePredictTwoTower`: User/item embeddings for similarity
+  - `PrePredictLoRA`: User/item embeddings for LoRA (`predictor.lora.*`)
 2. **Post-Score Plugins** (`plugin.postscore`, see [Post-Score Plugins](#post-score-plugins)): Turn scores into `final_result` offers
   - `PlatformDynamicEngagement` / `PlatformDynamicEngagementProduct`: Dynamic Engagement (no MOJO)
   - `PostScoreRecommender`, `PostScoreBasic`, `PostScoreRecommenderOffers`: MOJO recommenders
   - `PostScoreNetwork` / `PostScoreNetworkSelector`: Network Selector (not PageRank `approach=Network`)
   - `PostScoreTwoTower`: Two-Tower / similarity ranking
+  - `PostScoreLoRA`: LoRA ranking (`predictor.model.type=lora`)
   - `PostScoreSentimentalEquilibrium`: live `behaviorAlgos` + `sentimentalEquilibrium` (options-store `arm_reward`)
   - `PostScoreSentimentalEquilibriumPreScored`: Workbench SE algorithm job already on the feature store (`engagementScore`, `sentimental_equilibrium`, …)
 3. **Business Logic Plugins** (`plugin.business.`*): Custom business rules
@@ -350,6 +353,7 @@ Rebuild the localbuild JAR after changing Java. A properties-only class-name cha
 | `PreScoreLookup`     | Post-score needs recent contacts and responses                    | Mongo signature. Writes `params.prescore_data_lookup` (`resultArrayContacts`, `resultArrayResponses`).                                   |
 | `PrePredictAutoDate` | The model expects date parts (hour, day-of-week, weekend, …)      | Adds `datetime_*` fields to `featuresObj` and mirrors them onto `input` / `value`.                                                       |
 | `PrePredictTwoTower` | `predictor.model.type=similarity`                                 | Mongo signature. Loads user/item embeddings for `PostScoreTwoTower`. Pair with that post-score class.                                    |
+| `PrePredictLoRA`     | `predictor.model.type=lora`                                       | Mongo signature. Loads LoRA user/item embeddings (`predictor.lora.*`) for `PostScoreLoRA`. Do not mix with Two-Tower properties.          |
 
 
 ### Contract (custom Java)
@@ -357,7 +361,7 @@ Rebuild the localbuild JAR after changing Java. A properties-only class-name cha
 The loader looks for a Mongo overload first, then the two-argument form:
 
 ```java
-// With Mongo (PreScoreDynamic, PreScoreLookup, PrePredictTwoTower)
+// With Mongo (PreScoreDynamic, PreScoreLookup, PrePredictTwoTower, PrePredictLoRA)
 public static JSONObject getPrePredict(MongoClient mongoClient, JSONObject params, CqlSession session)
 
 // Without Mongo (DefaultPreScore, PrePredictCustomer, PrePredictAutoDate)
@@ -411,6 +415,7 @@ Use `has()` / `optJSONObject` before reads. Wrap lookups in try-catch and return
 - **Model features:** derive ratios, bins, or date parts before the MOJO sees the row.
 - **Eligibility hints:** stash an offer list on `params` for post-score to filter.
 - **Two-Tower:** always use `PrePredictTwoTower` with `PostScoreTwoTower`; do not mix with `PlatformDynamicEngagement`.
+- **LoRA:** always use `PrePredictLoRA` with `PostScoreLoRA` and `predictor.lora.*`; do not mix with Two-Tower or `PlatformDynamicEngagement`.
 
 ## Post-Score Plugins
 
@@ -474,6 +479,7 @@ plugin.postscore=com.ecosystem.plugin.customer.PlatformDynamicEngagement
 | `PostScoreNetwork`             | Network Selector: route this customer to another runtime by a feature (`switch_key`) | Needs `network` + `network_config` corpora. Nested hops use `in_params.ecosystem_network_path`. `experiment_selector` supports N-group allocations. **Not** PageRank `approach=Network`. |
 | `PostScoreNetworkSelector`     | Network Selector: route by the **scored offer** (`type=model_selector`)              | Same corpora; `switch_key` is unused. Nested hops use `in_params.ecosystem_network_path`. |
 | `PostScoreTwoTower`            | `predictor.model.type=similarity`                                                    | Pair with `PrePredictTwoTower`. Cosine/dot-product ranking.                      |
+| `PostScoreLoRA`                | `predictor.model.type=lora`                                                          | Pair with `PrePredictLoRA`. Same ranking path as Two-Tower; properties are `predictor.lora.*`. |
 | `PostScoreSpam`                | Spam vs ham classifier                                                               | Domain example; copy only if that is the use case.                               |
 | `PostScoreSpendingPersonality` | Spend Personality via REST                                                           | Domain example; not a generic recommender.                                       |
 | `PostScoreSentimentalEquilibriumPreScored` | Workbench `/sentimental-equilibrium` (or Process) already wrote SE fields onto the feature store | Same pattern as spend personality: copy `engagementScore` → `score`, `sentimental_equilibrium` → `offer`. Do **not** pair with live `behaviorAlgos`. |
@@ -560,6 +566,7 @@ For Dynamic Engagement, copy `PlatformDynamicEngagement` rather than this stub: 
 - **Learning recommender:** `PlatformDynamicEngagement` + `DefaultReward` (or a custom reward). Close the loop with `POST /response`.
 - **Supervised model:** `PostScoreBasic` or `PostScoreRecommender`; rank by model probability, optionally multiply by margin.
 - **Two-Tower:** `PrePredictTwoTower` + `PostScoreTwoTower`; not a Dynamic Engagement `approach`.
+- **LoRA:** `PrePredictLoRA` + `PostScoreLoRA` + `predictor.model.type=lora`; not Two-Tower and not a DE `approach`.
 - **Route traffic:** `PostScoreNetwork` / `PostScoreNetworkSelector` to another campaign URL. Do not confuse with `approach=Network` (PageRank on co-presented offers).
 - **Eligibility and price:** filter with `eligible_offers` or the offer matrix; set `offer_value` / `cost` before `getTopScores`.
 

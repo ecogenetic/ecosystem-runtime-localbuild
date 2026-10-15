@@ -52,10 +52,11 @@ The platform default Dynamic Engagement approach, when `approach` is missing, is
 | **Dynamic Engagement** | Yes — options store + rolling process | `PlatformDynamicEngagement` |
 | **Static H2O / sidecar** | No (unless you add DE on top) | `PostScoreBasic`, `PostScoreRecommender*` |
 | **Two-Tower / similarity** | No bandit loop; embedding retrieval | `PostScoreTwoTower` with `PrePredictTwoTower` |
+| **LoRA** | No bandit loop; low-rank adapter embeddings | `PostScoreLoRA` with `PrePredictLoRA` |
 | **Network Selector** | Routes to another runtime | `PostScoreNetwork` / `PostScoreNetworkSelector` |
 | **Spend / Money Personality** | Domain APIs, not a DE `approach` | `PostScoreSpendingPersonality` (spend) |
 
-If behaviour changes faster than you can retrain a MOJO, use Dynamic Engagement. If features are stable and you retrain weekly, use Static H2O. If the catalog is embeddings, use Two-Tower (`predictor.model.type=similarity`), not a DE `approach`.
+If behaviour changes faster than you can retrain a MOJO, use Dynamic Engagement. If features are stable and you retrain weekly, use Static H2O. If the catalog is embeddings, use Two-Tower (`predictor.model.type=similarity`), not a DE `approach`. If the catalog is a LoRA / nomic adapter, use LoRA (`predictor.model.type=lora`), not Two-Tower.
 
 ---
 
@@ -271,6 +272,7 @@ You only run **one** pre-score class and **one** post-score class per campaign. 
 | One model + offer matrix prices | `DefaultPreScore` | `PostScoreRecommenderOffers` | unused | Offer matrix with `offer_price` |
 | One binomial model per product | `DefaultPreScore` | `PostScoreRecommenderMulti` | unused | All product MOJOs on the classpath |
 | Two-Tower / similarity | **`PrePredictTwoTower`** | **`PostScoreTwoTower`** | unused | `predictor.model.type=similarity` |
+| LoRA recommender | **`PrePredictLoRA`** | **`PostScoreLoRA`** | unused | `predictor.model.type=lora` and `predictor.lora.*` |
 | Route to another runtime | `DefaultPreScore` or `PreScoreDynamic` | `PostScoreNetwork` or `PostScoreNetworkSelector` | unused | Corpora `network` + `network_config` |
 | Spend Personality | `DefaultPreScore` | `PostScoreSpendingPersonality` | unused | Personality REST / campaign |
 
@@ -284,6 +286,7 @@ You only run **one** pre-score class and **one** post-score class per campaign. 
 | `PreScoreLookup` | Post-score needs recent contacts/accepts | Any post-score that reads `prescore_data_lookup` | Mongo 3-arg signature. History lands on `params.prescore_data_lookup`. Copy a DE post-score if you need to consume it. | Do not assume `PlatformDynamicEngagement` reads this key unless you add that read. |
 | `PrePredictAutoDate` | MOJO needs date parts | `PostScoreBasic` / `PostScoreRecommender*` | Adds `datetime_*` onto `featuresObj` **and** `input`/`value`. Keep those arrays in lockstep if you add more fields. | Do not use alone for Two-Tower or DE cells. |
 | `PrePredictTwoTower` | `predictor.model.type=similarity` | **Only** `PostScoreTwoTower` | Mongo 3-arg. Loads `user_embedding` / item cache. Needs user embedding collection or `api:pytorch` sidecar / default lookup. | Do not pair with `PlatformDynamicEngagement`. |
+| `PrePredictLoRA` | `predictor.model.type=lora` | **Only** `PostScoreLoRA` | Mongo 3-arg. Loads LoRA user/item embeddings from `predictor.lora.*`. | Do not mix with Two-Tower properties or `PlatformDynamicEngagement`. |
 | Custom (copy `DefaultPreScore`) | Segment → cell, derived features, eligibility list for post-score | Matching post-score | Mutate `in_params` / `featuresObj` only. Return `params` (never null). Preserve `uuid`, `userid`, `lookup`, `resultcount`, `explore`. | Do not write `final_result`. Do not open your own Mongo/Cassandra connections. |
 
 **Pre-score checklist**
@@ -291,7 +294,7 @@ You only run **one** pre-score class and **one** post-score class per campaign. 
 | Step | Proper use |
 | --- | --- |
 | 1 | Choose the row in the table above; set `plugin.prescore` to the **full class name**. |
-| 2 | If you need Mongo (`PreScoreDynamic`, `PreScoreLookup`, `PrePredictTwoTower`), implement `getPrePredict(MongoClient, JSONObject, CqlSession)`. Otherwise the 2-arg form. |
+| 2 | If you need Mongo (`PreScoreDynamic`, `PreScoreLookup`, `PrePredictTwoTower`, `PrePredictLoRA`), implement `getPrePredict(MongoClient, JSONObject, CqlSession)`. Otherwise the 2-arg form. |
 | 3 | For DE, ensure `contextual_variable_one` / `_two` are set here or in invoke `params` so post-score `compareContextualVariableValues` can match options. |
 | 4 | If you add keys to `featuresObj` for a MOJO, also append them to `input` and `value`. |
 | 5 | Fail closed: log and return unmodified `params`. A throw here aborts the invoke. |
@@ -314,6 +317,7 @@ You only run **one** pre-score class and **one** post-score class per campaign. 
 | `PostScoreNetwork` | Network Selector: route by a **feature** (`switch_key`) | `DefaultPreScore` or `PreScoreDynamic` | Corpora `network` + `network_config`. Skip `getTopScores` only for `lookup_passthrough`. | Do not confuse with DE `approach=Network` (PageRank). That uses `PlatformDynamicEngagement`. |
 | `PostScoreNetworkSelector` | Network Selector: route by the **scored offer** | Same | `network_config.type=model_selector`. `switch_key` unused. | Same as above. |
 | `PostScoreTwoTower` | Similarity / two-tower | **`PrePredictTwoTower`** | Delegates to `SimilarityScorer`, then `getTopScores`. | Do not use without the matching pre-score. |
+| `PostScoreLoRA` | LoRA / `predictor.model.type=lora` | **`PrePredictLoRA`** | Same ranking path as Two-Tower; reads `predictor.lora.*` embeddings. | Do not mix with `PrePredictTwoTower` or DE post-score. |
 | `PostScoreSpam` | Spam vs ham classifier | `DefaultPreScore` | Domain example. Copy only if that is the campaign. | Do not use as a generic recommender. |
 | `PostScoreSpendingPersonality` | Spend Personality | `DefaultPreScore` | Calls personality REST; not a bandit. | Do not treat as Dynamic Engagement. |
 | Custom (copy DE or Basic) | Extra eligibility, margin, packing | Matching pre-score | Keep `offer`, `offer_name`, `score`, `uuid` on every row. DE: also `arm_reward`, `alpha`, `beta`, `learning_reward`. Call `getTopScores`. Return the input object on error (never null). | Do not drop `offer_name` (breaks `/response`). Do not train α/β here. |
@@ -401,6 +405,17 @@ plugin.postscore=com.ecosystem.plugin.customer.PostScoreTwoTower
 ```
 
 Pre-score loads user/item embeddings. Post-score delegates to `SimilarityScorer` (cosine / dot product) then `getTopScores`. Do not mix with `PlatformDynamicEngagement`.
+
+### LoRA (`predictor.model.type=lora`)
+
+Not a DE `approach` and not Two-Tower. Pair:
+
+```properties
+plugin.prescore=com.ecosystem.plugin.customer.PrePredictLoRA
+plugin.postscore=com.ecosystem.plugin.customer.PostScoreLoRA
+```
+
+Pre-score loads LoRA user/item embeddings from `predictor.lora.*`. Post-score uses the same cosine / dot path as Two-Tower. Do not mix `predictor.twotower.*` with this campaign.
 
 ### Network Selector (traffic routing)
 
