@@ -133,11 +133,11 @@ Key configuration properties:
 predictor.name=recommender
 
 # MongoDB connection
-mongo.connect=mongodb://user:password@localhost:54445/?authSource=admin
+mongo.connect=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@localhost:54445/?authSource=admin
 mongo.server=localhost
 mongo.port=54445
-mongo.ecosystem.user=***REMOVED***
-mongo.ecosystem.password=***REMOVED***
+mongo.ecosystem.user=${MONGO_USER}
+mongo.ecosystem.password=${MONGO_PASSWORD}
 
 # Plugin configuration
 plugin.prescore=com.ecosystem.plugin.customer.PrePredictCustomer
